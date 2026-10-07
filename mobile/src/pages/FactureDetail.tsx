@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { IonAlert, IonContent, IonPage } from "@ionic/react";
 import { closeCircleOutline, printOutline } from "ionicons/icons";
-import { annulerFacture, getFacture } from "../api/factures";
+import { annulerFacture } from "../api/factures";
+import { getFacture } from "../offline/donnees";
 import type { Facture } from "../types/facture";
 import { ApiError } from "../api/client";
 import ArticleImage from "../components/ArticleImage";
@@ -11,7 +12,7 @@ import { modePaiementLabel, statutLabel, typeVenteLabel, typeVenteTone } from ".
 import { useAuth } from "../auth/AuthContext";
 import { printReceipt } from "../utils/receipt";
 import { getPrinterIp, setPrinterIp } from "../lib/printerSettings";
-import { ActionBar, AppHeader, Button, Group, Money, PageNotice, Row, Section, SkeletonList, Tag } from "../ui";
+import { ActionBar, AppHeader, Button, Group, Money, Notice, PageNotice, Row, Section, SkeletonList, Tag } from "../ui";
 import ReglementTag from "../components/ReglementTag";
 import FactureLocation from "../components/FactureLocation";
 import { t } from "../i18n";
@@ -84,6 +85,13 @@ export default function FactureDetail() {
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
+        {facture?.erreurSync ? (
+          <PageNotice>{t("Le serveur a refusé cette facture : {e}", { e: facture.erreurSync })}</PageNotice>
+        ) : facture?.enAttente ? (
+          <Section>
+            <Notice tone="warning">{t("Facture enregistrée sur le téléphone : elle sera envoyée au serveur à la prochaine synchronisation.")}</Notice>
+          </Section>
+        ) : null}
 
         {loading && <SkeletonList rows={4} thumb />}
 

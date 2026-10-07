@@ -80,19 +80,30 @@ const clientSchema = z.object({
   longitude: z.number().optional(),
 });
 
+// Création : l'id peut être fourni par le mobile (client créé hors ligne, déjà
+// utilisé par ses factures) ; renvoyer la même création ne crée pas de doublon.
+const creationSchema = clientSchema.extend({ id: z.string().uuid().optional() });
+
 // Matricule fiscale (code) déjà pris : message lisible tel quel dans l'app.
 function erreurUnicite(res: Response, err: unknown) {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
     return res.status(409).json({ error: "Ce matricule fiscal est déjà utilisé par un autre client" });
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+    return res.status(404).json({ error: "Client introuvable" });
   }
   console.error(err);
   return res.status(500).json({ error: "Erreur serveur" });
 }
 
 clientsRouter.post("/", async (req, res) => {
-  const parsed = clientSchema.safeParse(req.body);
+  const parsed = creationSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
+    if (parsed.data.id) {
+      const existant = await prisma.client.findUnique({ where: { id: parsed.data.id } });
+      if (existant) return res.status(200).json(existant);
+    }
     const client = await prisma.client.create({ data: parsed.data });
     res.status(201).json(client);
   } catch (err) {
@@ -111,7 +122,17 @@ clientsRouter.put("/:id", async (req, res) => {
   }
 });
 
+// Suppression logique ; un client inconnu ou déjà supprimé répond 204 aussi
+// (suppression rejouée par la synchronisation hors ligne).
 clientsRouter.delete("/:id", async (req, res) => {
-  await prisma.client.update({ where: { id: req.params.id }, data: { deletedAt: new Date(), actif: false } });
-  res.status(204).send();
+  try {
+    await prisma.client.updateMany({
+      where: { id: req.params.id, deletedAt: null },
+      data: { deletedAt: new Date(), actif: false },
+    });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });

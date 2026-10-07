@@ -36,10 +36,21 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   auth?: boolean;
+  /** Abandonne la requête après ce délai (réseau faible) : erreur réseau. */
+  timeoutMs?: number;
+}
+
+/**
+ * Serveur injoignable (pas de réseau, délai dépassé) ou en panne (5xx), par
+ * opposition à un refus du serveur (4xx) qu'il ne sert à rien de rejouer tel quel.
+ */
+export function estErreurReseau(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status >= 500;
+  return true;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, auth = true } = options;
+  const { method = "GET", body, auth = true, timeoutMs } = options;
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (auth) {
@@ -47,11 +58,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const minuterie = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
+    });
+  } finally {
+    clearTimeout(minuterie);
+  }
 
   if (res.status === 401 && auth) {
     await setToken(null);

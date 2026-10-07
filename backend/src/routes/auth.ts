@@ -8,6 +8,16 @@ import { requireAdmin, requireAuth } from "../middleware/auth";
 
 export const authRouter = Router();
 
+// sv = version de session : voir requireAuth (déconnexion à la désactivation
+// ou au changement de mot de passe).
+function signerJeton(user: { id: string; code: string; role: string; sessionVersion: number }) {
+  return jwt.sign(
+    { id: user.id, code: user.code, role: user.role, sv: user.sessionVersion },
+    process.env.JWT_SECRET as string,
+    { expiresIn: (process.env.JWT_EXPIRES_IN || "12h") as jwt.SignOptions["expiresIn"] }
+  );
+}
+
 const loginSchema = z.object({
   code: z.string().min(1),
   password: z.string().min(1),
@@ -29,13 +39,7 @@ authRouter.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Identifiants invalides" });
   }
 
-  // sv = version de session : voir requireAuth (déconnexion à la désactivation
-  // ou au changement de mot de passe).
-  const token = jwt.sign(
-    { id: user.id, code: user.code, role: user.role, sv: user.sessionVersion },
-    process.env.JWT_SECRET as string,
-    { expiresIn: (process.env.JWT_EXPIRES_IN || "12h") as jwt.SignOptions["expiresIn"] }
-  );
+  const token = signerJeton(user);
 
   res.json({
     token,
@@ -47,6 +51,39 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
   if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
   res.json({ id: user.id, code: user.code, nom: user.nom, role: user.role, telephone: user.telephone });
+});
+
+// Changement de son propre mot de passe (l'admin n'a personne pour le faire à
+// sa place). Les autres appareils connectés à ce compte sont déconnectés ; celui
+// qui fait la demande reçoit un nouveau jeton et reste connecté.
+const MON_MOT_DE_PASSE_MIN = 8;
+const monMotDePasseSchema = z.object({
+  actuel: z.string().min(1, "Mot de passe actuel requis"),
+  nouveau: z.string().min(MON_MOT_DE_PASSE_MIN, `Nouveau mot de passe : ${MON_MOT_DE_PASSE_MIN} caractères minimum`),
+});
+
+authRouter.post("/me/password", requireAuth, async (req, res) => {
+  const parsed = monMotDePasseSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Données invalides" });
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+    // 400 et non 401 : l'app traite un 401 comme une session expirée (déconnexion).
+    if (!(await bcrypt.compare(parsed.data.actuel, user.passwordHash))) {
+      return res.status(400).json({ error: "Mot de passe actuel incorrect" });
+    }
+    if (parsed.data.nouveau === parsed.data.actuel) {
+      return res.status(400).json({ error: "Le nouveau mot de passe doit être différent de l'actuel" });
+    }
+    const maj = await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(parsed.data.nouveau, 10), sessionVersion: { increment: 1 } },
+    });
+    res.json({ token: signerJeton(maj) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 // ---------------------------------------------------------------- Gestion des comptes (admin)

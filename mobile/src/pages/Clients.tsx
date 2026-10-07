@@ -9,8 +9,8 @@ import {
   useIonViewWillEnter,
 } from "@ionic/react";
 import { addOutline, cashOutline, peopleOutline } from "ionicons/icons";
-import { listClients } from "../api/clients";
-import { listCredits } from "../api/credits";
+import { listClients, listCredits } from "../offline/donnees";
+import { useApresSync } from "../offline/sync";
 import type { CreditClient, FactureCredit } from "../types/credit";
 import CreditsList from "./CreditsList";
 import { AvanceSheet, PayerFactureSheet } from "./CreditSheets";
@@ -97,6 +97,13 @@ export default function Clients() {
     }
   }, [query]);
 
+  // Vendeur : nouvelles données reçues après une synchronisation.
+  const apresSync = useCallback(() => {
+    if (vue === "credits") fetchCredits();
+    else fetchClients();
+  }, [vue, fetchCredits, fetchClients]);
+  useApresSync(apresSync);
+
   useEffect(() => {
     setLoading(true);
     const timeout = setTimeout(fetchClients, 300);
@@ -170,7 +177,7 @@ export default function Clients() {
                         key={client.id}
                         onClick={() => navigate(`/clients/${client.id}`)}
                         title={client.nomCommerce}
-                        meta={joinMeta([client.code, client.ville])}
+                        meta={joinMeta([client.code, client.ville, client.enAttente ? t("En attente d'envoi") : null])}
                         trailing={
                           client.solde > 0 ? (
                             <Money value={client.solde} tone="warning" />

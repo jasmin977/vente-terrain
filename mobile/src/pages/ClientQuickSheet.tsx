@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createClient } from "../api/clients";
+import { createClient } from "../offline/donnees";
 import { ApiError } from "../api/client";
 import type { Client, ClientInput } from "../types/client";
 import { Button, Field, Notice, Sheet } from "../ui";

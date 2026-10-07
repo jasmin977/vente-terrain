@@ -9,7 +9,8 @@ import {
   useIonViewWillEnter,
 } from "@ionic/react";
 import { addOutline, chevronBackOutline, chevronForwardOutline, documentTextOutline } from "ionicons/icons";
-import { listFactures } from "../api/factures";
+import { listFactures } from "../offline/donnees";
+import { useApresSync } from "../offline/sync";
 import { listUsers } from "../api/auth";
 import type { Facture, ModePaiement } from "../types/facture";
 import type { UserSummary } from "../types/auth";
@@ -106,6 +107,8 @@ export default function Factures() {
   useIonViewWillEnter(() => {
     fetchFactures();
   }, [fetchFactures]);
+  // Vendeur : la liste se met à jour après chaque synchronisation (factures envoyées).
+  useApresSync(fetchFactures);
 
   const handleRefresh = async (e: CustomEvent<RefresherEventDetail>) => {
     await fetchFactures();
@@ -280,7 +283,13 @@ export default function Factures() {
                       trailing={
                         <>
                           <Money value={f.montantTTC} strike={annulee} />
-                          {annulee ? (
+                          {f.erreurSync ? (
+                            <Tag tone="danger">{t("Refusée")}</Tag>
+                          ) : f.enAttente ? (
+                            <Tag tone="warning" dot>
+                              {t("En attente")}
+                            </Tag>
+                          ) : annulee ? (
                             <Tag tone="danger">{statutLabel.ANNULEE}</Tag>
                           ) : (
                             <ReglementTag typeVente={f.typeVente} reglement={f.reglement} />

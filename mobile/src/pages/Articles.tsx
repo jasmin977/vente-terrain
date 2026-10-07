@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IonContent, IonPage, IonRefresher, IonRefresherContent, RefresherEventDetail } from "@ionic/react";
 import { addOutline, cubeOutline } from "ionicons/icons";
-import { listArticles } from "../api/articles";
+import { listArticles } from "../offline/donnees";
+import { useApresSync } from "../offline/sync";
 import type { Article } from "../types/article";
 import ArticleImage from "../components/ArticleImage";
 import { useAuth } from "../auth/AuthContext";
@@ -43,6 +44,8 @@ export default function Articles() {
       setLoading(false);
     }
   }, [query]);
+
+  useApresSync(fetchArticles);
 
   useEffect(() => {
     setLoading(true);

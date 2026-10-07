@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAdmin, requireAuth } from "../middleware/auth";
 import { creerFacture } from "../services/factureService";
+import { prochainNumeroFacture } from "../utils/numero";
 import { reglementsFactures } from "../services/creditService";
 
 export const facturesRouter = Router();
@@ -25,6 +26,19 @@ const factureSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   lignes: z.array(ligneSchema).min(1),
+});
+
+// Prochain numéro du vendeur connecté (V001-26-0007) : le mobile numérote
+// lui-même ses factures hors ligne et repart de là à chaque synchronisation.
+facturesRouter.get("/numero-suivant", async (req, res) => {
+  try {
+    const vendeur = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id }, select: { code: true } });
+    const numero = await prisma.$transaction((tx) => prochainNumeroFacture(tx, vendeur.code));
+    res.json({ numero });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 // Module 3 - Facturation : création d'une facture, décrémente automatiquement

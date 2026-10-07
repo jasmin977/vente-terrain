@@ -43,6 +43,10 @@ export interface Facture {
   client?: { id: string; nomCommerce: string; code: string; latitude?: number | null; longitude?: number | null };
   /** Détail et réponse de création (absent des listes). */
   vendeur?: { id: string; nom: string; code: string };
+  /** Créée sur le téléphone, pas encore envoyée au serveur. */
+  enAttente?: boolean;
+  /** Refus du serveur au dernier envoi. */
+  erreurSync?: string;
 }
 
 export interface LigneFactureInput {

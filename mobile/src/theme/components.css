@@ -2362,3 +2362,43 @@ a.rc-map__open {
   width: auto;
   text-decoration: none;
 }
+
+/* ================= Synchronisation (vendeur hors ligne) ================= */
+.rc-sync {
+  position: relative;
+  color: var(--rc-ink);
+}
+
+.rc-sync ion-icon {
+  font-size: 24px;
+}
+
+.rc-sync ion-spinner {
+  width: 22px;
+  height: 22px;
+}
+
+.rc-sync__badge {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--rc-radius-full);
+  background: var(--rc-warning);
+  color: var(--rc-bg);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-sync--erreur .rc-sync__badge {
+  background: var(--rc-danger);
+}
+
+.rc-sync__note {
+  padding: var(--rc-space-2) var(--rc-gutter) 0;
+}

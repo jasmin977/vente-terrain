@@ -12,6 +12,8 @@ export interface Client {
   solde: number;
   createdAt: string;
   updatedAt: string;
+  /** Créé ou modifié sur le téléphone, pas encore envoyé au serveur. */
+  enAttente?: boolean;
 }
 
 export interface ClientInput {

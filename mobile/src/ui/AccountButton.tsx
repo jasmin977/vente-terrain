@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IonAlert, IonIcon } from "@ionic/react";
-import { logOutOutline, peopleOutline, printOutline } from "ionicons/icons";
+import { keyOutline, logOutOutline, peopleOutline, printOutline } from "ionicons/icons";
 import { useAuth } from "../auth/AuthContext";
 import { getPrinterIp, setPrinterIp } from "../lib/printerSettings";
 import { initials } from "../utils/labels";
@@ -11,7 +11,10 @@ import Row from "./Row";
 import Tag from "./Tag";
 import Button from "./Button";
 import Field from "./Field";
-import { getLang, setLang, t, type Lang } from "../i18n";
+import { getLang, setLang, t, tn, type Lang } from "../i18n";
+import SyncButton from "../components/SyncButton";
+import MonMotDePasseSheet from "../components/MonMotDePasseSheet";
+import { useEtatSync } from "../offline/sync";
 import Segmented from "./Segmented";
 
 /**
@@ -26,6 +29,8 @@ export default function AccountButton() {
   const [ip, setIp] = useState("");
   const [savedIp, setSavedIp] = useState<string | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [monMotDePasse, setMonMotDePasse] = useState(false);
+  const { file } = useEtatSync();
 
   useEffect(() => {
     if (open) getPrinterIp().then((v) => {
@@ -40,6 +45,7 @@ export default function AccountButton() {
 
   return (
     <>
+      {user.role === "VENDEUR" && <SyncButton />}
       <button
         type="button"
         className="rc-iconbtn"
@@ -83,6 +89,20 @@ export default function AccountButton() {
                 }
                 title={t("Gérer les vendeurs")}
                 meta={t("Comptes, mots de passe, accès")}
+                chevron
+              />
+              <Row
+                onClick={() => {
+                  setOpen(false);
+                  setMonMotDePasse(true);
+                }}
+                leading={
+                  <span className="rc-thumb" style={{ width: 40, height: 40 }} aria-hidden="true">
+                    <IonIcon icon={keyOutline} style={{ fontSize: 22, color: "var(--rc-ink)" }} />
+                  </span>
+                }
+                title={t("Changer mon mot de passe")}
+                meta={t("Mot de passe du compte administrateur")}
                 chevron
               />
             </Group>
@@ -137,11 +157,21 @@ export default function AccountButton() {
         </Section>
       </Sheet>
 
+      <MonMotDePasseSheet isOpen={monMotDePasse} onDismiss={() => setMonMotDePasse(false)} />
+
       <IonAlert
         isOpen={confirmLogout}
         onDidDismiss={() => setConfirmLogout(false)}
         header={t("Se déconnecter ?")}
-        message={t("Vous devrez saisir à nouveau votre code et mot de passe.")}
+        message={
+          file.length > 0
+            ? `${t("Vous devrez saisir à nouveau votre code et mot de passe.")} ${tn(
+                file.length,
+                "{n} action pas encore envoyée reste sur ce téléphone : elle partira à votre prochaine connexion.",
+                "{n} actions pas encore envoyées restent sur ce téléphone : elles partiront à votre prochaine connexion."
+              )}`
+            : t("Vous devrez saisir à nouveau votre code et mot de passe.")
+        }
         buttons={[
           { text: t("Annuler"), role: "cancel" },
           {

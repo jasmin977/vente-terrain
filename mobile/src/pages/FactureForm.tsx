@@ -3,9 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Geolocation } from "@capacitor/geolocation";
 import { IonContent, IonPage } from "@ionic/react";
 import { addOutline, personAddOutline } from "ionicons/icons";
-import { listClients } from "../api/clients";
-import { listArticles } from "../api/articles";
-import { createFacture } from "../api/factures";
+import { createFacture, listArticles, listClients } from "../offline/donnees";
 import type { Client } from "../types/client";
 import type { Article } from "../types/article";
 import type { ModePaiement, TypeVente } from "../types/facture";
@@ -132,7 +130,9 @@ export default function FactureForm() {
       } catch {
         // non supporté sur le web
       }
-      const pos = await Geolocation.getCurrentPosition();
+      // Position récente acceptée (1 min) et 8 s au plus : sans réseau mobile, un
+      // premier repérage GPS peut être long et ne doit pas retarder la vente.
+      const pos = await Geolocation.getCurrentPosition({ maximumAge: 60_000, timeout: 8_000 });
       return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
     } catch {
       return null;

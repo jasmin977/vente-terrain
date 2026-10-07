@@ -259,10 +259,14 @@ ion-alert .alert-button {
   font-size: var(--rc-text-callout) !important;
   font-weight: 700 !important;
   text-transform: none !important;
+  /* Ionic aligne le texte à droite : un libellé sur deux lignes restait décalé. */
+  text-align: center !important;
+  padding-inline: var(--rc-space-3) !important;
 }
 
 ion-alert .alert-button-inner {
   justify-content: center !important;
+  text-align: center !important;
 }
 
 ion-alert .alert-button:not(.alert-button-role-cancel):last-child {

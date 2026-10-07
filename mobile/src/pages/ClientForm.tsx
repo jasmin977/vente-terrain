@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { IonAlert, IonContent, IonIcon, IonPage } from "@ionic/react";
 import { timeOutline, trashOutline } from "ionicons/icons";
-import { createClient, deleteClient, getClient, updateClient } from "../api/clients";
+import { createClient, deleteClient, getClient, updateClient } from "../offline/donnees";
 import type { ClientInput } from "../types/client";
 import { ApiError } from "../api/client";
 import { ActionBar, AppHeader, Button, Field, Group, PageNotice, Row, Section, SkeletonList } from "../ui";

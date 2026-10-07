@@ -35,6 +35,7 @@ import VendeurForm from "./VendeurForm";
 import { useAuth } from "../auth/AuthContext";
 import { t } from "../i18n";
 import { accueil } from "../utils/navigation";
+import { demarrerSyncAuto } from "../offline/sync";
 
 const TOP_LEVEL = ["/tableau-de-bord", "/factures", "/articles", "/clients", "/stock", "/inventaires"];
 
@@ -54,6 +55,11 @@ export default function TabsLayout() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
   const { pathname } = useLocation();
+
+  // Vendeur : envoi automatique des actions faites hors ligne (retour du réseau,
+  // retour dans l'app, toutes les deux minutes tant qu'il en reste).
+  const vendeurId = user?.role === "VENDEUR" ? user.id : null;
+  useEffect(() => (vendeurId ? demarrerSyncAuto() : undefined), [vendeurId]);
 
   // La barre d'onglets n'apparaît que sur les écrans racines : sur un écran
   // poussé (formulaire, détail) elle cède la place à la barre d'action
