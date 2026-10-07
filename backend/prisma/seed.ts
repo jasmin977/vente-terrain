@@ -4,7 +4,11 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = await bcrypt.hash("admin1234", 10);
+  // En production : SEED_ADMIN_PASSWORD / SEED_VENDEUR_PASSWORD (les valeurs
+  // par défaut sont publiques dans le dépôt, réservées au développement).
+  const motDePasseAdmin = process.env.SEED_ADMIN_PASSWORD || "admin1234";
+  const motDePasseVendeur = process.env.SEED_VENDEUR_PASSWORD || "vendeur1234";
+  const adminPassword = await bcrypt.hash(motDePasseAdmin, 10);
   const admin = await prisma.user.upsert({
     where: { code: "ADMIN" },
     create: {
@@ -16,7 +20,7 @@ async function main() {
     update: {},
   });
 
-  const vendeurPassword = await bcrypt.hash("vendeur1234", 10);
+  const vendeurPassword = await bcrypt.hash(motDePasseVendeur, 10);
   await prisma.user.upsert({
     where: { code: "V001" },
     create: {
@@ -188,8 +192,9 @@ async function main() {
   // premier chargement camion depuis l'app.
 
   console.log("Seed terminé. Comptes:");
-  console.log("  admin  -> code=ADMIN   mot de passe=admin1234");
-  console.log("  vendeur-> code=V001    mot de passe=vendeur1234");
+  const affiche = (mdp: string, variable: string) => (process.env[variable] ? `(${variable})` : mdp);
+  console.log(`  admin  -> code=ADMIN   mot de passe=${affiche(motDePasseAdmin, "SEED_ADMIN_PASSWORD")}`);
+  console.log(`  vendeur-> code=V001    mot de passe=${affiche(motDePasseVendeur, "SEED_VENDEUR_PASSWORD")}`);
 }
 
 main()

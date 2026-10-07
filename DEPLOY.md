@@ -14,11 +14,10 @@
    - `JWT_EXPIRES_IN` : `12h`
 5. **Redéployer** — *Deployments* → dernier déploiement → *Redeploy*. Le build applique les migrations (`prisma migrate deploy`).
 6. **Vérifier** — `https://<votre-projet>.vercel.app/health` doit répondre `{"status":"ok"}`.
-7. **Comptes de départ** — depuis `backend/`, en pointant sur Neon (URL dans *Storage → Neon → .env.local*) :
+7. **Comptes de départ** — depuis `backend/`, en pointant sur Neon (URL dans *Storage → Neon → .env.local*) et avec vos propres mots de passe (sans eux, ce seraient `admin1234` / `vendeur1234`, publics dans ce dépôt) :
    ```
-   DATABASE_URL="<url Neon>" npm run seed
+   DATABASE_URL="<url Neon>" SEED_ADMIN_PASSWORD="<mot de passe admin>" SEED_VENDEUR_PASSWORD="<mot de passe vendeur>" npm run seed
    ```
-   Puis changer tout de suite les mots de passe `admin1234` / `vendeur1234` dans l'app.
 
 Les jours et mois calculés par le serveur suivent l'heure de Tunis (`src/fuseau.ts`, modifiable avec la variable `APP_TIMEZONE`).
 
