@@ -1,15 +1,20 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+// Développement : `LIVE_RELOAD=1 npx cap sync android` charge l'app depuis le
+// serveur Vite du PC (live-reload, avec `adb reverse tcp:5173 tcp:5173`).
+// Sans cette variable (APK de production), l'app embarque le build de `dist`.
+const liveReload = process.env.LIVE_RELOAD === '1';
+
 const config: CapacitorConfig = {
   appId: 'com.bonneaffaire.venteterrain',
   appName: 'Revive Cosmetix',
   webDir: 'dist',
-  server: {
-    // Charge l'app depuis le serveur Vite en dev pour le live-reload natif.
-    // À retirer (ou commenter) avant de builder un APK de production.
-    url: 'http://localhost:5173',
-    cleartext: true,
-  },
+  ...(liveReload && {
+    server: {
+      url: 'http://localhost:5173',
+      cleartext: true,
+    },
+  }),
 };
 
 export default config;

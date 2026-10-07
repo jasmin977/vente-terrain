@@ -5,11 +5,16 @@
 
 generator client {
   provider = "prisma-client-js"
+  // rhel-openssl-3.0.x : moteur des fonctions Vercel.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Connexion directe (sans pooler) pour les migrations ; avec Neon sur Vercel,
+  // l'intégration fournit DATABASE_URL (poolée) et DATABASE_URL_UNPOOLED.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum Role {

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "./fuseau";
 import { app } from "./app";
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;

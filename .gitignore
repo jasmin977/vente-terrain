@@ -18,3 +18,8 @@ backend/uploads/*
 # OS / editors
 .DS_Store
 Thumbs.db
+
+# Android release signing (never commit: losing or leaking the key blocks updates)
+*.jks
+*.keystore
+keystore.properties
