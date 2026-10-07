@@ -23,6 +23,3 @@ Thumbs.db
 *.jks
 *.keystore
 keystore.properties
-
-# Dossier vide créé par le build Vercel (le preset « Other » en exige un).
-backend/public/
