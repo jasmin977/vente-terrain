@@ -1,0 +1,242 @@
+/* ------------------------------------------------------------------ */
+/* Revive Cosmetix — design tokens                                     */
+/*                                                                     */
+/* Direction: "atelier ledger". A field-sales tool that carries the    */
+/* brand: warm paper, near-black ink, bronze taken from the monogram.  */
+/* Bronze is reserved for selection and brand moments — never for     */
+/* body text (use --rc-accent-ink when bronze text is needed).         */
+/*                                                                     */
+/* Components consume ONLY the semantic --rc-* tokens below. The       */
+/* --ion-* variables are mapped from them so any remaining Ionic       */
+/* primitive (alerts, refresher, modals) inherits the same identity.   */
+/* All text/background pairs verified ≥ 4.5:1 in both themes.         */
+/* ------------------------------------------------------------------ */
+
+:root {
+  /* ---------- Color: light ---------- */
+  --rc-bg: #f5f2ed;            /* paper — page background */
+  --rc-surface: #ffffff;       /* raised groups, sheets, inputs */
+  --rc-raised: #ffffff;        /* selected thumb on a fill track */
+  --rc-fill: #ede8e1;          /* sunken/neutral fills, skeletons, chips */
+  --rc-fill-strong: #e2dcd3;   /* pressed state on fills */
+
+  --rc-ink: #1a1816;           /* primary text, primary buttons */
+  --rc-ink-2: #5b554f;         /* secondary text (6.6:1 on paper) */
+  --rc-ink-3: #756e67;         /* tertiary text / placeholders (4.5:1) */
+  --rc-on-ink: #f5f2ed;        /* text on ink surfaces */
+
+  --rc-line: #e6e0d8;          /* hairline separators */
+  --rc-line-strong: #d6cec4;   /* group outlines */
+  --rc-control: #948b81;       /* input boundaries (3:1 non-text) */
+
+  --rc-accent: #9c7a4e;        /* bronze — indicators, selection marks */
+  --rc-accent-ink: #7a5a30;    /* bronze text */
+  --rc-accent-soft: #f1e8da;   /* selected backgrounds */
+
+  --rc-positive: #2d6a47;
+  --rc-positive-soft: #e2eee6;
+  --rc-warning: #94570a;
+  --rc-warning-soft: #f8ebd6;
+  --rc-danger: #b0352a;
+  --rc-danger-soft: #f7e2de;
+
+  /* Chart series (payment modes) — set validated for colour-blind separation
+     and lightness in both themes. Crédit is also hatched (texture). */
+  --rc-chart-especes: #2a78d6;
+  --rc-chart-cheque: #1baf7a;
+  --rc-chart-virement: #c2477a;
+  --rc-chart-credit: #94570a;
+
+  --rc-scrim: rgba(20, 18, 16, 0.45);
+  --rc-press: rgba(26, 24, 22, 0.06);   /* press state layer on surfaces */
+  --rc-focus: #9c7a4e;
+
+  /* ---------- Typography ---------- */
+  --rc-font-sans: "Manrope Variable", "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rc-font-display: "Instrument Serif", "Didot", "Bodoni 72", Georgia, serif;
+
+  /* Type roles: size / line-height. Body never below 15px; meta 13px min. */
+  --rc-text-display: 34px;   /* serif top-level titles */
+  --rc-text-amount: 32px;    /* hero amounts */
+  --rc-text-title: 20px;     /* section titles in sheets/detail */
+  --rc-text-headline: 16px;  /* row titles */
+  --rc-text-body: 16px;
+  --rc-text-callout: 15px;
+  --rc-text-meta: 13.5px;    /* row metadata */
+  --rc-text-label: 12px;     /* uppercase group labels, tab labels */
+
+  /* ---------- Spacing (4pt grid) ---------- */
+  --rc-space-1: 4px;
+  --rc-space-2: 8px;
+  --rc-space-3: 12px;
+  --rc-space-4: 16px;
+  --rc-space-5: 20px;
+  --rc-space-6: 24px;
+  --rc-space-8: 32px;
+  --rc-space-10: 40px;
+  --rc-gutter: 16px;         /* page side margin */
+
+  /* ---------- Radius: restrained, tool-like ---------- */
+  --rc-radius-xs: 6px;       /* tags */
+  --rc-radius-sm: 10px;      /* inputs, buttons, thumbnails */
+  --rc-radius-md: 14px;      /* grouped sections */
+  --rc-radius-lg: 22px;      /* sheet top corners */
+  --rc-radius-full: 999px;
+
+  /* ---------- Sizing ---------- */
+  --rc-target: 48px;         /* minimum touch target */
+  --rc-control-h: 52px;      /* inputs, primary buttons */
+  --rc-row-h: 64px;          /* list rows */
+
+  /* ---------- Elevation: only things that float ---------- */
+  --rc-elev-float: 0 6px 20px rgba(26, 24, 22, 0.16), 0 1px 3px rgba(26, 24, 22, 0.12);
+  --rc-elev-bar: 0 -1px 0 var(--rc-line), 0 -8px 24px rgba(26, 24, 22, 0.06);
+  --rc-elev-sheet: 0 -12px 40px rgba(20, 18, 16, 0.18);
+
+  /* ---------- Motion ---------- */
+  --rc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rc-dur-press: 90ms;
+  --rc-dur-base: 180ms;
+
+  /* ---------- Ionic mapping ---------- */
+  --ion-font-family: var(--rc-font-sans);
+  --ion-background-color: var(--rc-bg);
+  --ion-background-color-rgb: 245, 242, 237;
+  --ion-text-color: var(--rc-ink);
+  --ion-text-color-rgb: 26, 24, 22;
+  --ion-border-color: var(--rc-line);
+  --ion-item-background: var(--rc-surface);
+  --ion-card-background: var(--rc-surface);
+  --ion-toolbar-background: var(--rc-bg);
+  --ion-tab-bar-background: var(--rc-surface);
+  --ion-overlay-background-color: var(--rc-surface);
+  --ion-backdrop-color: #141210;
+  --ion-backdrop-opacity: 0.45;
+
+  --ion-color-primary: #1a1816;
+  --ion-color-primary-rgb: 26, 24, 22;
+  --ion-color-primary-contrast: #f5f2ed;
+  --ion-color-primary-contrast-rgb: 245, 242, 237;
+  --ion-color-primary-shade: #0f0e0d;
+  --ion-color-primary-tint: #36332f;
+
+  --ion-color-secondary: #9c7a4e;
+  --ion-color-secondary-rgb: 156, 122, 78;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #896b45;
+  --ion-color-secondary-tint: #a68760;
+
+  --ion-color-success: #2d6a47;
+  --ion-color-success-rgb: 45, 106, 71;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #285d3e;
+  --ion-color-success-tint: #427959;
+
+  --ion-color-warning: #94570a;
+  --ion-color-warning-rgb: 148, 87, 10;
+  --ion-color-warning-contrast: #ffffff;
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #824d09;
+  --ion-color-warning-tint: #9f6823;
+
+  --ion-color-danger: #b0352a;
+  --ion-color-danger-rgb: 176, 53, 42;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #9b2f25;
+  --ion-color-danger-tint: #b8493f;
+
+  --ion-color-medium: #5b554f;
+  --ion-color-medium-rgb: 91, 85, 79;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: #504b46;
+  --ion-color-medium-tint: #6b6661;
+
+  --ion-color-light: #ede8e1;
+  --ion-color-light-rgb: 237, 232, 225;
+  --ion-color-light-contrast: #1a1816;
+  --ion-color-light-contrast-rgb: 26, 24, 22;
+  --ion-color-light-shade: #d1ccc6;
+  --ion-color-light-tint: #efeae4;
+}
+
+@media (min-width: 400px) {
+  :root {
+    --rc-gutter: 20px;
+  }
+}
+
+/* ---------- Color: dark ---------------------------------------------- */
+/* Used in the van at night / dim shops. Not an inversion: warm charcoal  */
+/* surfaces, desaturated lighter tones, primary buttons flip to paper.    */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rc-bg: #121110;
+    --rc-surface: #1b1917;
+    --rc-raised: #3a3632;
+    --rc-fill: #262320;
+    --rc-fill-strong: #312d29;
+
+    --rc-ink: #f3efe9;
+    --rc-ink-2: #b3aba2;
+    --rc-ink-3: #958c83;
+    --rc-on-ink: #121110;
+
+    --rc-line: #2a2724;
+    --rc-line-strong: #3a3531;
+    --rc-control: #6e665e;
+
+    --rc-accent: #c9a574;
+    --rc-accent-ink: #d6b88c;
+    --rc-accent-soft: #2e261c;
+
+    --rc-positive: #7bc39a;
+    --rc-positive-soft: #1c2c23;
+    --rc-warning: #e3ae57;
+    --rc-warning-soft: #33291a;
+    --rc-danger: #f08a7e;
+    --rc-danger-soft: #3a211e;
+
+    --rc-chart-especes: #3987e5;
+    --rc-chart-cheque: #199e70;
+    --rc-chart-virement: #d06aa0;
+    --rc-chart-credit: #c98500;
+
+    --rc-scrim: rgba(0, 0, 0, 0.6);
+    --rc-press: rgba(243, 239, 233, 0.07);
+    --rc-focus: #c9a574;
+
+    --rc-elev-float: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--rc-line-strong);
+    --rc-elev-bar: 0 -1px 0 var(--rc-line);
+    --rc-elev-sheet: 0 -1px 0 var(--rc-line-strong);
+
+    --ion-background-color: var(--rc-bg);
+    --ion-background-color-rgb: 18, 17, 16;
+    --ion-text-color-rgb: 243, 239, 233;
+    --ion-backdrop-color: #000000;
+    --ion-backdrop-opacity: 0.6;
+
+    --ion-color-primary: #f3efe9;
+    --ion-color-primary-rgb: 243, 239, 233;
+    --ion-color-primary-contrast: #121110;
+    --ion-color-primary-contrast-rgb: 18, 17, 16;
+    --ion-color-primary-shade: #d6d2cd;
+    --ion-color-primary-tint: #f4f1eb;
+
+    --ion-color-danger: #f08a7e;
+    --ion-color-danger-rgb: 240, 138, 126;
+    --ion-color-danger-contrast: #121110;
+    --ion-color-danger-contrast-rgb: 18, 17, 16;
+
+    --ion-color-medium: #b3aba2;
+    --ion-color-medium-rgb: 179, 171, 162;
+
+    --ion-color-light: #262320;
+    --ion-color-light-rgb: 38, 35, 32;
+    --ion-color-light-contrast: #f3efe9;
+    --ion-color-light-contrast-rgb: 243, 239, 233;
+  }
+}

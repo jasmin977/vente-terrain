@@ -1,0 +1,420 @@
+// Schema de la base de données centrale (PostgreSQL)
+// Toutes les entités synchronisables utilisent un id UUID (généré côté mobile
+// si créées hors-ligne) + updatedAt/deletedAt pour permettre une synchronisation
+// incrémentale (delta sync) fiable entre le backend et la base locale SQLite du mobile.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VENDEUR
+}
+
+enum TypeVente {
+  COMPTANT
+  CREDIT
+}
+
+enum ModePaiement {
+  ESPECES
+  CHEQUE
+  VIREMENT
+  TPE
+}
+
+enum StatutFacture {
+  VALIDEE
+  ANNULEE
+}
+
+// Effet sur le stock camion : CHARGEMENT +, RETOUR (camion -> dépôt) -,
+// VENTE -, RETOUR_CLIENT (produit repris chez un client) +, AJUSTEMENT signé.
+enum SensMouvementStock {
+  CHARGEMENT
+  RETOUR
+  VENTE
+  AJUSTEMENT
+  RETOUR_CLIENT
+}
+
+// Mouvements du dépôt central : réception fournisseur (ENTREE), sortie vers un
+// camion (CHARGEMENT), retour des invendus d'un camion (RETOUR).
+enum SensMouvementDepot {
+  ENTREE
+  CHARGEMENT
+  RETOUR
+  AJUSTEMENT
+}
+
+enum StatutInventaire {
+  EN_COURS
+  VALIDE
+}
+
+// Justification d'un écart d'inventaire, saisie par l'admin.
+enum MotifEcart {
+  ENDOMMAGE
+  PERDU
+  ECHANTILLON
+  AUTRE
+}
+
+model User {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  nom            String
+  email          String?  @unique
+  telephone      String?
+  passwordHash   String
+  role           Role     @default(VENDEUR)
+  actif          Boolean  @default(true)
+  // Incrémenté à la désactivation du compte ou au changement de mot de passe :
+  // les jetons émis avant deviennent invalides (déconnexion immédiate).
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stockCamion      StockCamion[]
+  chargements      ChargementCamion[]
+  factures         Facture[]
+  paiements        Paiement[]
+  visites          Visite[]
+  mouvementsStock  MouvementStock[]
+  mouvementsDepot  MouvementDepot[]   @relation("MouvementDepotVendeur")
+  entreesDepot     EntreeDepot[]      @relation("EntreeDepotAdmin")
+  inventaires      Inventaire[]       @relation("InventaireVendeur")
+  inventairesFaits Inventaire[]       @relation("InventaireAdmin")
+
+  @@map("users")
+}
+
+model Article {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  codeBarre   String?
+  designation String
+  marque      String?
+  unit        String?
+  img         String?
+  prixAchat   Decimal   @db.Decimal(12, 3)
+  prixVente   Decimal   @db.Decimal(12, 3)
+  colisage    Int       @default(1)
+  tva         Decimal   @default(19) @db.Decimal(5, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  stockCamion      StockCamion[]
+  stockDepot       StockDepot?
+  mouvementsDepot  MouvementDepot[]
+  lignesEntree     LigneEntreeDepot[]
+  lignesInventaire LigneInventaire[]
+  lignesFacture    LigneFacture[]
+  lignesRetour     LigneRetour[]
+  lignesChargement LigneChargement[]
+  mouvementsStock  MouvementStock[]
+
+  @@index([updatedAt])
+  @@map("articles")
+}
+
+model Client {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  nomCommerce   String
+  responsable   String?
+  telephone     String?
+  adresse       String?
+  ville         String?
+  latitude      Float?
+  longitude     Float?
+  actif         Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  factures  Facture[]
+  retours   Retour[]
+  paiements Paiement[]
+  visites   Visite[]
+
+  @@index([updatedAt])
+  @@map("clients")
+}
+
+model ChargementCamion {
+  id        String             @id @default(uuid())
+  vendeurId String
+  vendeur   User               @relation(fields: [vendeurId], references: [id])
+  sens      SensMouvementStock @default(CHARGEMENT)
+  // N° de bon de chargement / retour (facultatif).
+  reference String?
+  date      DateTime           @default(now())
+  lignes    LigneChargement[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  // Suppression par l\'admin : le stock est rétabli et le document reste
+  // visible dans l\'historique, marqué supprimé.
+  deletedAt DateTime?
+
+  @@index([updatedAt])
+  @@index([vendeurId])
+  @@map("chargements_camion")
+}
+
+model LigneChargement {
+  id             String           @id @default(uuid())
+  chargementId   String
+  chargement     ChargementCamion @relation(fields: [chargementId], references: [id])
+  articleId      String
+  article        Article          @relation(fields: [articleId], references: [id])
+  quantiteColis  Decimal          @db.Decimal(12, 3)
+  // Quantité réellement transférée en unités (la saisie peut se faire en
+  // colis ou directement en unités).
+  quantiteUnites Decimal?         @db.Decimal(12, 3)
+
+  @@map("lignes_chargement")
+}
+
+// Stock du dépôt central, une ligne par article.
+model StockDepot {
+  id        String   @id @default(uuid())
+  articleId String   @unique
+  article   Article  @relation(fields: [articleId], references: [id])
+  quantite  Decimal  @default(0) @db.Decimal(12, 3)
+  updatedAt DateTime @updatedAt
+
+  @@map("stock_depot")
+}
+
+model MouvementDepot {
+  id        String             @id @default(uuid())
+  articleId String
+  article   Article            @relation(fields: [articleId], references: [id])
+  sens      SensMouvementDepot
+  quantite  Decimal            @db.Decimal(12, 3)
+  vendeurId String?
+  vendeur   User?              @relation("MouvementDepotVendeur", fields: [vendeurId], references: [id])
+  reference String?
+  date      DateTime           @default(now())
+  entreeId  String?
+  entree    EntreeDepot?       @relation(fields: [entreeId], references: [id])
+
+  @@index([articleId])
+  @@index([entreeId])
+  @@map("mouvements_depot")
+}
+
+// Réception de marchandise au dépôt (bon de livraison). Supprimable : le
+// stock dépôt est alors diminué d'autant.
+model EntreeDepot {
+  id         String             @id @default(uuid())
+  reference  String?
+  date       DateTime           @default(now())
+  adminId    String?
+  admin      User?              @relation("EntreeDepotAdmin", fields: [adminId], references: [id])
+  createdAt  DateTime           @default(now())
+  deletedAt  DateTime?
+  lignes     LigneEntreeDepot[]
+  mouvements MouvementDepot[]
+
+  @@index([date])
+  @@map("entrees_depot")
+}
+
+model LigneEntreeDepot {
+  id        String      @id @default(uuid())
+  entreeId  String
+  entree    EntreeDepot @relation(fields: [entreeId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article     @relation(fields: [articleId], references: [id])
+  // En pièces.
+  quantite  Decimal     @db.Decimal(12, 3)
+
+  @@map("lignes_entree_depot")
+}
+
+// Inventaire du stock d'un camion. Tant qu'il est EN_COURS, les quantités
+// théoriques suivent le stock camion en temps réel ; à la validation, elles
+// sont figées et le stock camion est remplacé par les quantités comptées.
+model Inventaire {
+  id             String            @id @default(uuid())
+  vendeurId      String
+  vendeur        User              @relation("InventaireVendeur", fields: [vendeurId], references: [id])
+  adminId        String
+  admin          User              @relation("InventaireAdmin", fields: [adminId], references: [id])
+  statut         StatutInventaire  @default(EN_COURS)
+  note           String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  dateValidation DateTime?
+  lignes         LigneInventaire[]
+
+  @@index([vendeurId, createdAt])
+  @@map("inventaires")
+}
+
+model LigneInventaire {
+  id                String      @id @default(uuid())
+  inventaireId      String
+  inventaire        Inventaire  @relation(fields: [inventaireId], references: [id], onDelete: Cascade)
+  articleId         String
+  article           Article     @relation(fields: [articleId], references: [id])
+  quantiteReelle    Decimal     @db.Decimal(12, 3)
+  // Figée à la validation (null tant que l'inventaire est en cours).
+  quantiteTheorique Decimal?    @db.Decimal(12, 3)
+  motif             MotifEcart?
+  note              String?
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([inventaireId, articleId])
+  @@map("lignes_inventaire")
+}
+
+// Solde courant du stock embarqué par vendeur/article (dénormalisé pour lecture rapide)
+model StockCamion {
+  id        String   @id @default(uuid())
+  vendeurId String
+  vendeur   User     @relation(fields: [vendeurId], references: [id])
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id])
+  quantite  Decimal  @default(0) @db.Decimal(12, 3)
+  updatedAt DateTime @updatedAt
+
+  @@unique([vendeurId, articleId])
+  @@index([updatedAt])
+  @@map("stock_camion")
+}
+
+model MouvementStock {
+  id        String             @id @default(uuid())
+  vendeurId String
+  vendeur   User               @relation(fields: [vendeurId], references: [id])
+  articleId String
+  article   Article            @relation(fields: [articleId], references: [id])
+  sens      SensMouvementStock
+  quantite  Decimal            @db.Decimal(12, 3)
+  reference String?
+  date      DateTime           @default(now())
+
+  @@index([vendeurId, articleId])
+  @@map("mouvements_stock")
+}
+
+model Facture {
+  id           String        @id @default(uuid())
+  numero       String        @unique
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id])
+  vendeurId    String
+  vendeur      User          @relation(fields: [vendeurId], references: [id])
+  date         DateTime      @default(now())
+  typeVente    TypeVente     @default(COMPTANT)
+  modePaiement ModePaiement?
+  montantHT    Decimal       @db.Decimal(12, 3)
+  montantTVA   Decimal       @db.Decimal(12, 3)
+  montantTTC   Decimal       @db.Decimal(12, 3)
+  statut       StatutFacture @default(VALIDEE)
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  lignes    LigneFacture[]
+  paiements Paiement[]
+
+  @@index([updatedAt])
+  @@index([clientId])
+  @@index([vendeurId])
+  @@map("factures")
+}
+
+model LigneFacture {
+  id           String  @id @default(uuid())
+  factureId    String
+  facture      Facture @relation(fields: [factureId], references: [id])
+  articleId    String
+  article      Article @relation(fields: [articleId], references: [id])
+  quantite     Decimal @db.Decimal(12, 3)
+  prixUnitaire Decimal @db.Decimal(12, 3)
+  tauxTva      Decimal @db.Decimal(5, 2)
+  montantHT    Decimal @db.Decimal(12, 3)
+  montantTTC   Decimal @db.Decimal(12, 3)
+
+  @@map("lignes_facture")
+}
+
+model Retour {
+  id        String        @id @default(uuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  vendeurId String
+  date      DateTime      @default(now())
+  motif     String?
+  lignes    LigneRetour[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+
+  @@index([updatedAt])
+  @@map("retours")
+}
+
+model LigneRetour {
+  id        String  @id @default(uuid())
+  retourId  String
+  retour    Retour  @relation(fields: [retourId], references: [id])
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id])
+  quantite  Decimal @db.Decimal(12, 3)
+  montant   Decimal @db.Decimal(12, 3)
+
+  @@map("lignes_retour")
+}
+
+model Paiement {
+  id        String       @id @default(uuid())
+  clientId  String
+  client    Client       @relation(fields: [clientId], references: [id])
+  factureId String?
+  facture   Facture?     @relation(fields: [factureId], references: [id])
+  vendeurId String
+  vendeur   User         @relation(fields: [vendeurId], references: [id])
+  montant   Decimal      @db.Decimal(12, 3)
+  mode      ModePaiement
+  reference String?
+  date      DateTime     @default(now())
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  @@index([updatedAt])
+  @@index([clientId])
+  @@map("paiements")
+}
+
+// Point GPS enregistré à chaque facture / visite pour le suivi du parcours
+model Visite {
+  id        String   @id @default(uuid())
+  vendeurId String
+  vendeur   User     @relation(fields: [vendeurId], references: [id])
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  latitude  Float
+  longitude Float
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([vendeurId, date])
+  @@map("visites")
+}

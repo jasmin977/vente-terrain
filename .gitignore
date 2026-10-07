@@ -1,0 +1,20 @@
+# Dependencies and builds
+node_modules/
+dist/
+*.log
+
+# Secrets and local settings: keep only the .env.example templates
+.env
+.env.*
+!.env.example
+
+# Files uploaded through the app (article photos…)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Local Claude Code tooling
+.claude/
+
+# OS / editors
+.DS_Store
+Thumbs.db

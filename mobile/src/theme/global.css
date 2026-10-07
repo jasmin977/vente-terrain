@@ -1,0 +1,307 @@
+/* ------------------------------------------------------------------ */
+/* Revive Cosmetix — base layer + Ionic overrides                      */
+/* Ionic stays for routing, transitions, scrolling, refresher, modals */
+/* and gestures; its default visuals are neutralised here so screens  */
+/* are built from the rc-* components (components.css).               */
+/* ------------------------------------------------------------------ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--rc-font-sans);
+  color: var(--rc-ink);
+  background: var(--rc-bg);
+  font-feature-settings: "ss01" off;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rc-focus);
+  outline-offset: 2px;
+}
+
+.rc-num {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.rc-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Content ---------- */
+ion-content {
+  --background: var(--rc-bg);
+  --color: var(--rc-ink);
+  --padding-bottom: var(--rc-space-6);
+}
+
+/* ---------- Header container (custom AppHeader lives inside) ---------- */
+ion-header.rc-header {
+  background: var(--rc-bg);
+  box-shadow: none;
+}
+
+ion-header.rc-header::after {
+  display: none;
+}
+
+/* ---------- Tab bar ---------- */
+/* Flat, full width, anchored to the gesture area: the classic thumb-zone
+   bar. The active tab is marked by an ink icon/label and a bronze rule —
+   never by color alone (filled icon + weight change too). */
+ion-tab-bar {
+  --background: var(--rc-surface);
+  --border: 0;
+  border-top: 1px solid var(--rc-line);
+  /* La barre d'onglets d'Ionic est en box-sizing content-box : la hauteur ne
+     compte que la barre (50px) et le padding ajoute la zone des boutons système
+     (safe area) — ne pas l'additionner aussi à la hauteur, sinon elle compte double. */
+  height: 50px;
+  padding-bottom: var(--ion-safe-area-bottom, 0px);
+}
+
+ion-tab-bar.rc-tabbar-hidden {
+  display: none !important;
+}
+
+ion-tab-button {
+  --background: transparent;
+  --background-focused: var(--rc-press);
+  --color: var(--rc-ink-3);
+  --color-selected: var(--rc-ink);
+  --ripple-color: transparent;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  position: relative;
+  max-width: 120px;
+  min-height: 48px;
+}
+
+ion-tab-button::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 28px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--rc-accent);
+  transform: translateX(-50%) scaleX(0);
+  transition: transform var(--rc-dur-base) var(--rc-ease);
+}
+
+ion-tab-button.tab-selected::before {
+  transform: translateX(-50%) scaleX(1);
+}
+
+ion-tab-button ion-icon {
+  font-size: 22px;
+  margin: 0 0 2px;
+}
+
+ion-tab-button ion-label {
+  margin: 0;
+  font-size: var(--rc-text-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+ion-tab-button.tab-selected ion-label {
+  font-weight: 800;
+}
+
+/* ---------- Footer (sticky action bars) ---------- */
+ion-footer.rc-footer {
+  background: var(--rc-surface);
+  box-shadow: var(--rc-elev-bar);
+}
+
+ion-footer.rc-footer::before {
+  display: none;
+}
+
+/* ---------- Back button ---------- */
+ion-back-button.rc-back {
+  --color: var(--rc-ink);
+  --icon-font-size: 24px;
+  --icon-margin-start: 0;
+  --icon-margin-end: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+  --min-width: var(--rc-target);
+  --min-height: var(--rc-target);
+  --border-radius: var(--rc-radius-full);
+  --background-hover: var(--rc-press);
+  --background-focused: var(--rc-press);
+  --ripple-color: var(--rc-ink);
+  width: var(--rc-target);
+  height: var(--rc-target);
+  margin-inline-start: -10px;
+  display: block;
+}
+
+ion-back-button.rc-back::part(text) {
+  display: none;
+}
+
+/* ---------- Refresher ---------- */
+ion-refresher ion-refresher-content {
+  --color: var(--rc-ink-2);
+}
+
+ion-refresher .refresher-pulling-icon,
+ion-refresher .refresher-refreshing-icon {
+  color: var(--rc-ink);
+}
+
+/* ---------- Modals → sheets ---------- */
+ion-modal.rc-sheet {
+  --background: var(--rc-surface);
+  --border-radius: var(--rc-radius-lg);
+  --box-shadow: var(--rc-elev-sheet);
+  --handle-background: var(--rc-line-strong);
+  --handle-width: 40px;
+  --handle-height: 5px;
+}
+
+ion-modal.rc-sheet ion-content {
+  --background: var(--rc-surface);
+}
+
+/* ---------- Alerts (system confirmation dialogs) ---------- */
+ion-alert.rc-alert,
+ion-alert {
+  --background: var(--rc-surface);
+  --max-width: 340px;
+}
+
+ion-alert .alert-wrapper {
+  border-radius: var(--rc-radius-md) !important;
+  box-shadow: var(--rc-elev-float) !important;
+}
+
+ion-alert .alert-head {
+  padding: var(--rc-space-6) var(--rc-space-6) var(--rc-space-2) !important;
+  text-align: start !important;
+}
+
+ion-alert .alert-title {
+  font-family: var(--rc-font-sans) !important;
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  color: var(--rc-ink) !important;
+}
+
+ion-alert .alert-message {
+  padding: 0 var(--rc-space-6) var(--rc-space-5) !important;
+  font-size: var(--rc-text-callout) !important;
+  line-height: 1.5;
+  color: var(--rc-ink-2) !important;
+  text-align: start !important;
+}
+
+ion-alert .alert-input-group {
+  padding: 0 var(--rc-space-6) var(--rc-space-4) !important;
+}
+
+ion-alert .alert-input {
+  min-height: var(--rc-control-h);
+  padding: 0 var(--rc-space-3) !important;
+  border: 1.5px solid var(--rc-control) !important;
+  border-radius: var(--rc-radius-sm);
+  background: var(--rc-surface) !important;
+  color: var(--rc-ink) !important;
+  font-size: var(--rc-text-body) !important;
+  margin: 0 !important;
+}
+
+ion-alert .alert-input:focus {
+  border-color: var(--rc-ink) !important;
+}
+
+ion-alert .alert-button-group {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: var(--rc-space-2);
+  padding: 0 var(--rc-space-4) var(--rc-space-4) !important;
+  border: 0 !important;
+}
+
+ion-alert .alert-button {
+  flex: 1 1 0 !important;
+  min-height: var(--rc-target) !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: var(--rc-radius-sm) !important;
+  background: var(--rc-fill) !important;
+  color: var(--rc-ink) !important;
+  font-size: var(--rc-text-callout) !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+}
+
+ion-alert .alert-button-inner {
+  justify-content: center !important;
+}
+
+ion-alert .alert-button:not(.alert-button-role-cancel):last-child {
+  background: var(--rc-ink) !important;
+  color: var(--rc-on-ink) !important;
+}
+
+/* Same specificity as the rule above + later in the file, so a destructive
+   button stays red even when it is the last (primary-position) button. */
+ion-alert .alert-button.alert-button-role-destructive:not(.alert-button-role-cancel) {
+  background: var(--rc-danger) !important;
+  color: #ffffff !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  ion-alert .alert-button.alert-button-role-destructive:not(.alert-button-role-cancel) {
+    color: #121110 !important;
+  }
+}
+
+/* ---------- Toasts (brief confirmations / scan errors) ---------- */
+ion-toast.rc-toast {
+  --background: var(--rc-ink);
+  --color: var(--rc-on-ink);
+  --border-radius: var(--rc-radius-sm);
+  --box-shadow: var(--rc-elev-float);
+  --start: var(--rc-gutter);
+  --end: var(--rc-gutter);
+  font-family: var(--rc-font-sans);
+  font-weight: 700;
+}
+
+/* ---------- Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
