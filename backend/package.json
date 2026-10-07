@@ -13,7 +13,8 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma migrate deploy && mkdir -p public"
+    "vercel-build": "prisma generate && prisma migrate deploy && mkdir -p public",
+    "set-password": "tsx prisma/set-password.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
