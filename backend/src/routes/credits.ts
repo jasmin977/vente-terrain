@@ -97,12 +97,12 @@ creditsRouter.post("/factures/:id/payer", async (req, res) => {
     }
     const paiement = await prisma.$transaction(async (tx) => {
       const facture = await tx.facture.findUnique({ where: { id: req.params.id } });
-      if (!facture || facture.deletedAt) throw new Refus("Facture introuvable");
-      if (facture.typeVente !== "CREDIT") throw new Refus("Cette facture n'est pas une vente à crédit");
-      if (facture.statut !== "VALIDEE") throw new Refus("Cette facture est annulée");
+      if (!facture || facture.deletedAt) throw new Refus("Bon de livraison introuvable");
+      if (facture.typeVente !== "CREDIT") throw new Refus("Ce bon de livraison n'est pas une vente à crédit");
+      if (facture.statut !== "VALIDEE") throw new Refus("Ce bon de livraison est annulé");
       const situation = await situationClient(facture.clientId, tx);
       const ligne = situation.factures.find((f) => f.id === facture.id);
-      if (!ligne) throw new Refus("Cette facture est déjà payée");
+      if (!ligne) throw new Refus("Ce bon de livraison est déjà payé");
       return tx.paiement.create({
         data: {
           id: data.id,
@@ -175,7 +175,7 @@ creditsRouter.delete("/paiements/:id", requireAdmin, async (req, res) => {
     const p = await prisma.paiement.findUnique({ where: { id: req.params.id }, include: { facture: true } });
     if (!p || p.deletedAt) return res.status(404).json({ error: "Paiement introuvable" });
     if (p.facture?.typeVente === "COMPTANT") {
-      return res.status(409).json({ error: "Ce règlement appartient à une vente comptant : annulez la facture." });
+      return res.status(409).json({ error: "Ce règlement appartient à une vente comptant : annulez le bon de livraison." });
     }
     await prisma.paiement.update({ where: { id: p.id }, data: { deletedAt: new Date() } });
     res.status(204).send();

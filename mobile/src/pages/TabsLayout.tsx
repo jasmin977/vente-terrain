@@ -74,13 +74,13 @@ export default function TabsLayout() {
   const tabs = isAdmin
     ? [
         { tab: "tableau-de-bord", href: "/tableau-de-bord", label: t("Accueil"), icon: statsChartOutline, iconOn: statsChart },
-        { tab: "factures", href: "/factures", label: t("Factures"), icon: documentTextOutline, iconOn: documentText },
+        { tab: "factures", href: "/factures", label: t("Livraisons"), icon: documentTextOutline, iconOn: documentText },
         { tab: "clients", href: "/clients", label: t("Clients"), icon: peopleOutline, iconOn: people },
         { tab: "stock", href: "/stock", label: t("Stock"), icon: carOutline, iconOn: car },
         { tab: "inventaires", href: "/inventaires", label: t("Inventaires"), icon: clipboardOutline, iconOn: clipboard },
       ]
     : [
-        { tab: "factures", href: "/factures", label: t("Factures"), icon: documentTextOutline, iconOn: documentText },
+        { tab: "factures", href: "/factures", label: t("Livraisons"), icon: documentTextOutline, iconOn: documentText },
         { tab: "articles", href: "/articles", label: t("Articles"), icon: cubeOutline, iconOn: cube },
         { tab: "clients", href: "/clients", label: t("Clients"), icon: peopleOutline, iconOn: people },
       ];
@@ -100,6 +100,7 @@ export default function TabsLayout() {
         <Route path="/stock" element={<Stock />} />
         <Route path="/stock/chargement" element={<ChargementForm kind="chargement" />} />
         <Route path="/stock/entree" element={<ChargementForm kind="entree" />} />
+        <Route path="/stock/retour" element={<ChargementForm kind="retour" />} />
         <Route path="/stock/entrees/:id" element={<StockDocumentDetail kind="entree" />} />
         <Route path="/stock/chargements/:id" element={<StockDocumentDetail kind="chargement" />} />
         <Route path="/stock/camion/:vendeurId/articles/:articleId" element={<CamionArticleHistorique />} />

@@ -15,7 +15,7 @@ function decrire(a: ActionEnAttente, clients: Client[]): { titre: string; detail
   switch (a.type) {
     case "facture.creer":
       return {
-        titre: t("Facture {numero}", { numero: a.facture.numero }),
+        titre: t("BL {numero}", { numero: a.facture.numero }),
         detail: joinMeta([a.locale.client?.nomCommerce, `${formatAmount(a.locale.montantTTC)} TND`]),
       };
     case "client.creer":
@@ -25,7 +25,7 @@ function decrire(a: ActionEnAttente, clients: Client[]): { titre: string; detail
     case "client.supprimer":
       return { titre: t("Client supprimé"), detail: nom(a.clientId) };
     case "credit.payer":
-      return { titre: t("Paiement de la facture {numero}", { numero: a.numero }), detail: `${formatAmount(a.montant)} TND` };
+      return { titre: t("Paiement du BL {numero}", { numero: a.numero }), detail: `${formatAmount(a.montant)} TND` };
     case "credit.avance":
       return { titre: t("Avance"), detail: joinMeta([nom(a.clientId), `${formatAmount(a.montant)} TND`]) };
   }

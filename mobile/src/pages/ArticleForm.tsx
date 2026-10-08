@@ -10,6 +10,7 @@ import type { ArticleInput } from "../types/article";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import ArticleImage from "../components/ArticleImage";
+import ArticleMouvements from "../components/ArticleMouvements";
 import { formatAmount } from "../utils/format";
 import { ActionBar, AppHeader, Button, Field, Group, IconButton, PageNotice, Section, SkeletonList } from "../ui";
 import { t } from "../i18n";
@@ -247,6 +248,8 @@ export default function ArticleForm() {
                 </div>
               </Group>
             </Section>
+
+            {canEdit && !isNew && <ArticleMouvements articleId={id!} />}
 
             {canEdit && !isNew && (
               <Section>

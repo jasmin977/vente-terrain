@@ -83,6 +83,9 @@ interface Personne {
   id: string;
   nom: string;
   code: string;
+  /** Vendeur d'un chargement : véhicule imprimé sur le bon de sortie. */
+  voiture?: string | null;
+  matriculeVoiture?: string | null;
 }
 
 export interface EntreeDepotResume {

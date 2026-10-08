@@ -10,10 +10,8 @@ import {
   downloadOutline,
   personOutline,
   receiptOutline,
-  swapVerticalOutline,
 } from "ionicons/icons";
 import {
-  getMouvementsParArticle,
   getStockCamion,
   getStockDepot,
   getVentesParArticle,
@@ -27,7 +25,6 @@ import type { Article } from "../types/article";
 import type {
   ChargementResume,
   EntreeDepotResume,
-  MouvementsArticle,
   StockCamionItem,
   StockDepotItem,
   VentesParArticle,
@@ -62,8 +59,10 @@ import { getLocale, t, tn } from "../i18n";
 
 // « articles » : le catalogue (prix, fiches), rangé ici pour l'admin.
 type Lieu = "depot" | "camion" | "articles";
-type VueDepot = "stock" | "entrees";
-type VueCamion = "stock" | "chargements" | "mouvements";
+// Vocabulaire du dépôt : bons d'entrée (réceptions) et bons de sortie
+// (chargements des camions, tous vendeurs).
+type VueDepot = "stock" | "entrees" | "sorties" | "retours";
+type VueCamion = "stock" | "chargements" | "retours";
 
 /** 1er jour du mois décalé de `decalage` mois par rapport au mois en cours. */
 function premierDuMois(decalage: number) {
@@ -118,7 +117,7 @@ export default function Stock() {
   const [entrees, setEntrees] = useState<EntreeDepotResume[]>([]);
   const [stock, setStock] = useState<StockCamionItem[]>([]);
   const [chargements, setChargements] = useState<ChargementResume[]>([]);
-  const [mouvementsArticles, setMouvementsArticles] = useState<MouvementsArticle[]>([]);
+  const [sorties, setSorties] = useState<ChargementResume[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,11 +144,18 @@ export default function Stock() {
           const [d, v] = await Promise.all([getStockDepot(), getVentesParArticle(30).catch(() => null)]);
           setDepot(d);
           setVentes(v);
-        } else setEntrees(await listEntreesDepot());
+        } else if (vueDepot === "entrees") setEntrees(await listEntreesDepot(plageMois(decalageMois)));
+        else {
+          // Bons de sortie = chargements ; bons de retour = retours camion → dépôt (tous camions).
+          const sens = vueDepot === "sorties" ? "CHARGEMENT" : "RETOUR";
+          setSorties((await listChargements(undefined, plageMois(decalageMois))).filter((c) => c.sens === sens));
+        }
       } else if (vendeurId) {
         if (vueCamion === "stock") setStock(await getStockCamion(vendeurId));
-        else if (vueCamion === "chargements") setChargements(await listChargements(vendeurId, plageMois(decalageMois)));
-        else setMouvementsArticles(await getMouvementsParArticle(vendeurId, plageMois(decalageMois)));
+        else if (vueCamion === "chargements" || vueCamion === "retours") {
+          const sens = vueCamion === "chargements" ? "CHARGEMENT" : "RETOUR";
+          setChargements((await listChargements(vendeurId, plageMois(decalageMois))).filter((c) => c.sens === sens));
+        }
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("Impossible de charger le stock"));
@@ -177,7 +183,6 @@ export default function Stock() {
   const q = query.trim();
   const depotFiltre = useMemo(() => depot.filter((d) => articleCorrespond(d.article, q)), [depot, q]);
   const stockFiltre = useMemo(() => stock.filter((s) => articleCorrespond(s.article, q)), [stock, q]);
-  const mouvementsFiltres = useMemo(() => mouvementsArticles.filter((m) => articleCorrespond(m.article, q)), [mouvementsArticles, q]);
   const articlesFiltres = useMemo(() => articles.filter((a) => articleCorrespond(a, q)), [articles, q]);
 
   if (!isAdmin) return <Navigate to="/factures" replace />;
@@ -185,7 +190,8 @@ export default function Stock() {
   const vendeur = vendeurs.find((v) => v.id === vendeurId);
   const camionSansVendeur = lieu === "camion" && !vendeurId;
   // La recherche produit ne concerne que les listes d'articles, pas l'historique.
-  const vueProduits = lieu === "articles" ? true : lieu === "depot" ? vueDepot === "stock" : vueCamion !== "chargements";
+  const vueProduits =
+    lieu === "articles" ? true : lieu === "depot" ? vueDepot === "stock" : vueCamion === "stock";
 
   // Catalogue : un code-barres reconnu ouvre directement la fiche article.
   const handleScan = (code: string) => {
@@ -224,9 +230,9 @@ export default function Stock() {
   const contenuDepot = () => {
     if (vueDepot === "entrees") {
       return (
-        <Section flush aside={entrees.length > 0 ? tn(entrees.length, "{n} entrée", "{n} entrées") : undefined}>
+        <Section flush aside={entrees.length > 0 ? tn(entrees.length, "{n} bon d'entrée", "{n} bons d'entrée") : undefined}>
           {entrees.length === 0 ? (
-            <EmptyState icon={receiptOutline} title={t("Aucune entrée.")} message={t("Les réceptions au dépôt apparaîtront ici.")} />
+            <EmptyState icon={receiptOutline} title={t("Aucun bon d'entrée ce mois-ci.")} message={t("Les réceptions au dépôt apparaîtront ici.")} />
           ) : (
             <div className="rc-list">
               {entrees.map((e) => (
@@ -235,12 +241,54 @@ export default function Stock() {
                   muted={Boolean(e.deletedAt)}
                   chevron
                   onClick={() => navigate(`/stock/entrees/${e.id}`)}
-                  title={e.reference || t("Entrée sans référence")}
+                  title={e.reference || t("Bon d'entrée sans référence")}
                   meta={joinMeta([formatDateTime(e.date), e.admin?.nom])}
                   trailing={
                     <>
                       <TotalDocument totalPieces={e.totalPieces} nbLignes={e.nbLignes} />
                       {e.deletedAt && <Tag tone="danger">{t("Supprimée")}</Tag>}
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </Section>
+      );
+    }
+    if (vueDepot === "sorties" || vueDepot === "retours") {
+      const retours = vueDepot === "retours";
+      return (
+        <Section
+          flush
+          aside={
+            sorties.length > 0
+              ? retours
+                ? tn(sorties.length, "{n} bon de retour", "{n} bons de retour")
+                : tn(sorties.length, "{n} bon de sortie", "{n} bons de sortie")
+              : undefined
+          }
+        >
+          {sorties.length === 0 ? (
+            retours ? (
+              <EmptyState icon={carOutline} title={t("Aucun bon de retour ce mois-ci.")} message={t("Les retours des camions au dépôt apparaîtront ici.")} />
+            ) : (
+              <EmptyState icon={carOutline} title={t("Aucun bon de sortie ce mois-ci.")} message={t("Les chargements des camions apparaîtront ici.")} />
+            )
+          ) : (
+            <div className="rc-list">
+              {sorties.map((c) => (
+                <Row
+                  key={c.id}
+                  muted={Boolean(c.deletedAt)}
+                  chevron
+                  onClick={() => navigate(`/stock/chargements/${c.id}`)}
+                  title={c.reference || (retours ? t("Bon de retour sans référence") : t("Bon de sortie sans référence"))}
+                  meta={joinMeta([formatDateTime(c.date), t("Camion de {nom}", { nom: c.vendeur.nom })])}
+                  trailing={
+                    <>
+                      <TotalDocument totalPieces={c.totalPieces} nbLignes={c.nbLignes} />
+                      {c.deletedAt && <Tag tone="danger">{t("Supprimé")}</Tag>}
                     </>
                   }
                 />
@@ -286,18 +334,25 @@ export default function Stock() {
   };
 
   const contenuCamion = () => {
-    if (vueCamion === "chargements") {
+    if (vueCamion === "chargements" || vueCamion === "retours") {
+      const retours = vueCamion === "retours";
       return (
         <Section
           flush
-          aside={chargements.length > 0 ? tn(chargements.length, "{n} chargement ou retour", "{n} chargements et retours") : undefined}
+          aside={
+            chargements.length > 0
+              ? retours
+                ? tn(chargements.length, "{n} bon de retour", "{n} bons de retour")
+                : tn(chargements.length, "{n} bon de chargement", "{n} bons de chargement")
+              : undefined
+          }
         >
           {chargements.length === 0 ? (
-            <EmptyState
-              icon={carOutline}
-              title={t("Aucun chargement ce mois-ci.")}
-              message={t("Les chargements et retours de ce camion apparaîtront ici.")}
-            />
+            retours ? (
+              <EmptyState icon={carOutline} title={t("Aucun retour ce mois-ci.")} message={t("Les retours de ce camion au dépôt apparaîtront ici.")} />
+            ) : (
+              <EmptyState icon={carOutline} title={t("Aucun chargement ce mois-ci.")} message={t("Les chargements de ce camion apparaîtront ici.")} />
+            )
           ) : (
             <div className="rc-list">
               {chargements.map((c) => (
@@ -306,54 +361,14 @@ export default function Stock() {
                   muted={Boolean(c.deletedAt)}
                   chevron
                   onClick={() => navigate(`/stock/chargements/${c.id}`)}
-                  title={c.sens === "CHARGEMENT" ? t("Chargement") : t("Retour au dépôt")}
-                  meta={joinMeta([formatDateTime(c.date), c.reference])}
+                  title={c.reference || (retours ? t("Bon de retour sans référence") : t("Bon de chargement sans référence"))}
+                  meta={formatDateTime(c.date)}
                   trailing={
                     <>
                       <TotalDocument totalPieces={c.totalPieces} nbLignes={c.nbLignes} />
                       {c.deletedAt && <Tag tone="danger">{t("Supprimé")}</Tag>}
                     </>
                   }
-                />
-              ))}
-            </div>
-          )}
-        </Section>
-      );
-    }
-    if (vueCamion === "mouvements") {
-      // Un article par ligne ; on ouvre son cycle de vie dans ce camion.
-      return (
-        <Section
-          flush
-          aside={
-            mouvementsArticles.length > 0
-              ? joinMeta([
-                  tn(mouvementsArticles.length, "{n} article", "{n} articles"),
-                  decalageMois < 0 ? t("stock en fin de mois") : null,
-                ])
-              : undefined
-          }
-        >
-          {mouvementsFiltres.length === 0 ? (
-            <EmptyState icon={swapVerticalOutline} title={t("Aucun mouvement ce mois-ci.")} />
-          ) : (
-            <div className="rc-list">
-              {mouvementsFiltres.map((a) => (
-                <Row
-                  key={a.article.id}
-                  thumb
-                  chevron
-                  leading={<ArticleImage src={a.article.img} alt="" />}
-                  title={a.article.designation}
-                  meta={joinMeta([
-                    a.charge ? t("Chargé {n}", { n: a.charge }) : null,
-                    a.vendu ? t("Vendu {n}", { n: a.vendu }) : null,
-                    a.retourDepot ? t("Retourné {n}", { n: a.retourDepot }) : null,
-                    a.retourClient ? t("Repris {n}", { n: a.retourClient }) : null,
-                  ])}
-                  onClick={() => navigate(`/stock/camion/${vendeurId}/articles/${a.article.id}`)}
-                  trailing={<Quantity value={a.stock} colisage={Number(a.article.colisage)} />}
                 />
               ))}
             </div>
@@ -455,9 +470,13 @@ export default function Stock() {
                 label={t("Affichage du dépôt")}
                 value={vueDepot}
                 onChange={setVueDepot}
+                wrap
+                columns={2}
                 options={[
                   { value: "stock", label: t("Stock") },
-                  { value: "entrees", label: t("Entrées") },
+                  { value: "entrees", label: t("Bons d'entrée") },
+                  { value: "sorties", label: t("Bons de sortie") },
+                  { value: "retours", label: t("Bons de retour") },
                 ]}
               />
             ) : (
@@ -468,7 +487,7 @@ export default function Stock() {
                 options={[
                   { value: "stock", label: t("Stock") },
                   { value: "chargements", label: t("Chargements") },
-                  { value: "mouvements", label: t("Mouvements") },
+                  { value: "retours", label: t("Retours") },
                 ]}
               />
             )}
@@ -476,7 +495,7 @@ export default function Stock() {
         )}
 
         {/* Chargements et mouvements du camion : un mois à la fois. */}
-        {lieu === "camion" && !camionSansVendeur && vueCamion !== "stock" && (
+        {((lieu === "camion" && !camionSansVendeur && vueCamion !== "stock") || (lieu === "depot" && vueDepot !== "stock")) && (
           <div className="rc-period">
             <div className="rc-daystep">
               <IconButton
@@ -528,9 +547,17 @@ export default function Stock() {
         {lieu === "articles" ? (
           <Fab icon={addOutline} label={t("Nouvel article")} onClick={() => navigate("/articles/new")} />
         ) : lieu === "depot" ? (
-          <Fab icon={downloadOutline} label={t("Entrée dépôt")} onClick={() => navigate("/stock/entree")} />
+          vueDepot === "sorties" ? (
+            <Fab icon={addOutline} label={t("Bon de chargement")} onClick={() => navigate("/stock/chargement")} />
+          ) : vueDepot === "retours" ? (
+            <Fab icon={addOutline} label={t("Bon de retour")} onClick={() => navigate("/stock/retour")} />
+          ) : (
+            <Fab icon={downloadOutline} label={t("Bon d'entrée")} onClick={() => navigate("/stock/entree")} />
+          )
+        ) : vueCamion === "retours" ? (
+          <Fab icon={addOutline} label={t("Bon de retour")} onClick={() => navigate("/stock/retour", { state: { vendeurId } })} />
         ) : (
-          <Fab icon={addOutline} label={t("Chargement")} onClick={() => navigate("/stock/chargement")} />
+          <Fab icon={addOutline} label={t("Bon de chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId } })} />
         )}
       </IonContent>
 

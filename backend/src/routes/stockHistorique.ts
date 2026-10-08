@@ -78,9 +78,11 @@ async function verifierSuppressionEntree(
   return { possible: true };
 }
 
-stockHistoriqueRouter.get("/depot/entrees", async (_req, res) => {
+stockHistoriqueRouter.get("/depot/entrees", async (req, res) => {
   try {
+    const date = plageDates(req.query);
     const entrees = await prisma.entreeDepot.findMany({
+      where: date ? { date } : {},
       include: { admin: entreeInclude.admin, lignes: { select: { quantite: true } } },
       orderBy: { date: "desc" },
       take: 200,
@@ -140,7 +142,8 @@ stockHistoriqueRouter.delete("/depot/entrees/:id", async (req, res) => {
 // ================================================================ Chargements / retours
 
 const chargementInclude = {
-  vendeur: { select: { id: true, nom: true, code: true } },
+  // voiture / matricule : imprimés sur le bon de sortie.
+  vendeur: { select: { id: true, nom: true, code: true, voiture: true, matriculeVoiture: true } },
   lignes: { include: { article: true } },
 } satisfies Prisma.ChargementCamionInclude;
 

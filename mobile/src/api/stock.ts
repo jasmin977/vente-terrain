@@ -52,8 +52,8 @@ export function createChargement(input: ChargementInput) {
 
 // ---- Historique (suppression = stock rétabli, document conservé marqué supprimé)
 
-export function listEntreesDepot(): Promise<EntreeDepotResume[]> {
-  return apiRequest<EntreeDepotResume[]>("/stock/depot/entrees");
+export function listEntreesDepot(plage?: PlageDates): Promise<EntreeDepotResume[]> {
+  return apiRequest<EntreeDepotResume[]>(`/stock/depot/entrees${plage ? `?${plageQuery(plage).slice(1)}` : ""}`);
 }
 
 export function getEntreeDepot(id: string): Promise<EntreeDepotDetail> {
@@ -64,8 +64,30 @@ export function supprimerEntreeDepot(id: string) {
   return apiRequest<void>(`/stock/depot/entrees/${id}`, { method: "DELETE" });
 }
 
-export function listChargements(vendeurId: string, plage?: PlageDates): Promise<ChargementResume[]> {
-  return apiRequest<ChargementResume[]>(`/stock/chargements?vendeurId=${vendeurId}${plageQuery(plage)}`);
+/** Mouvements d'un article dans chaque camion (fiche article). */
+export interface MouvementsArticleCamion {
+  vendeur: { id: string; nom: string; code: string };
+  charge: number;
+  retourDepot: number;
+  vendu: number;
+  retourClient: number;
+  ajuste: number;
+  stock: number;
+  dernier: string | null;
+}
+
+export function getMouvementsArticleParCamion(articleId: string): Promise<MouvementsArticleCamion[]> {
+  return apiRequest<MouvementsArticleCamion[]>(`/stock/mouvements/par-article/${articleId}`);
+}
+
+/** Prochain N° proposé pour un bon (« 2026-0001 »), une suite par type. */
+export function getNumeroSuivant(type: "ENTREE" | "SORTIE" | "RETOUR"): Promise<{ numero: string }> {
+  return apiRequest<{ numero: string }>(`/stock/numero-suivant?type=${type}`);
+}
+
+/** Chargements et retours d'un camion ; sans vendeurId, ceux de tous les camions. */
+export function listChargements(vendeurId?: string, plage?: PlageDates): Promise<ChargementResume[]> {
+  return apiRequest<ChargementResume[]>(`/stock/chargements?vendeurId=${vendeurId ?? ""}${plageQuery(plage)}`);
 }
 
 export function getChargement(id: string): Promise<ChargementDetail> {

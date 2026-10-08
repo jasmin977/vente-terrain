@@ -121,7 +121,7 @@ export function PayerFactureSheet({
   return (
     <Sheet
       isOpen={facture !== null}
-      title={t("Payer la facture")}
+      title={t("Payer le bon de livraison")}
       height="auto"
       onDismiss={onDismiss}
       onWillPresent={() => {
@@ -134,7 +134,7 @@ export function PayerFactureSheet({
           <Section>
             <Group>
               <Row compact label={t("Client")} trailing={<span className="rc-row__value">{client?.nomCommerce}</span>} />
-              <Row compact label={t("Facture")} trailing={<span className="rc-row__value">{facture.numero}</span>} />
+              <Row compact label={t("Bon de livraison")} trailing={<span className="rc-row__value">{facture.numero}</span>} />
               <Row compact label={t("Date")} trailing={<span className="rc-row__value rc-num">{formatDate(facture.date)}</span>} />
               <Row compact label={t("Montant TTC")} trailing={<Money value={facture.montantTTC} />} />
               {facture.paye > 0 && <Row compact label={t("Déjà réglé")} trailing={<Money value={facture.paye} />} />}
@@ -259,7 +259,7 @@ export function AvanceSheet({
               required
               placeholder={t("Choisir un client")}
               value={credit?.client.nomCommerce ?? situation?.client.nomCommerce}
-              meta={credit ? `${t("Doit {m} TND", { m: formatAmount(credit.totalDu) })} · ${tn(credit.factures.length, "{n} facture", "{n} factures")}` : undefined}
+              meta={credit ? `${t("Doit {m} TND", { m: formatAmount(credit.totalDu) })} · ${tn(credit.factures.length, "{n} bon de livraison", "{n} bons de livraison")}` : undefined}
               onOpen={() => setPickerOpen(true)}
             />
 
@@ -283,7 +283,7 @@ export function AvanceSheet({
                   </Button>
                 </div>
                 {enc.fields}
-                <p className="rc-footnote">{t("L'avance est imputée aux factures les plus anciennes en premier.")}</p>
+                <p className="rc-footnote">{t("L'avance est imputée aux bons de livraison les plus anciens en premier.")}</p>
               </>
             )}
 
@@ -302,7 +302,7 @@ export function AvanceSheet({
                   key={p.id}
                   compact
                   title={<span className="rc-num">{formatDate(p.date)}</span>}
-                  meta={joinMeta([p.facture ? t("Facture {numero}", { numero: p.facture.numero }) : t("Avance"), modePaiementLabel[p.mode], p.reference, p.vendeur.nom])}
+                  meta={joinMeta([p.facture ? t("BL {numero}", { numero: p.facture.numero }) : t("Avance"), modePaiementLabel[p.mode], p.reference, p.vendeur.nom])}
                   trailing={
                     <span className="rc-inline">
                       <Money value={p.montant} />

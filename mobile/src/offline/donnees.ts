@@ -252,7 +252,7 @@ export async function payerFacture(factureId: string, input: EncaissementInput):
   const credits = await listCredits();
   const groupe = credits.find((g) => g.factures.some((f) => f.id === factureId));
   const facture = groupe?.factures.find((f) => f.id === factureId);
-  if (!groupe || !facture) throw new ApiError(409, t("Cette facture est déjà payée"));
+  if (!groupe || !facture) throw new ApiError(409, t("Ce bon de livraison est déjà payé"));
   await ajouter({
     type: "credit.payer",
     paiementId: crypto.randomUUID(),
@@ -303,7 +303,7 @@ export async function getFacture(id: string): Promise<Facture> {
   }
   const enCache = (await lireCache("factures")).find((f) => f.id === id);
   if (enCache) return avecPaiementsEnAttente(enCache, file);
-  throw new ApiError(404, t("Facture introuvable"));
+  throw new ApiError(404, t("Bon de livraison introuvable"));
 }
 
 /**

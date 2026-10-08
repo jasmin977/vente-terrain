@@ -97,6 +97,8 @@ const userSelect = {
   nom: true,
   email: true,
   telephone: true,
+  voiture: true,
+  matriculeVoiture: true,
   role: true,
   actif: true,
   createdAt: true,
@@ -117,6 +119,8 @@ const createUserSchema = z.object({
   nom: z.string().trim().min(1, "Nom requis").max(120),
   email: optionnel.refine((v) => !v || z.string().email().safeParse(v).success, "Email invalide"),
   telephone: optionnel,
+  voiture: optionnel,
+  matriculeVoiture: optionnel,
   password: z.string().min(MOT_DE_PASSE_MIN, `Mot de passe : ${MOT_DE_PASSE_MIN} caractères minimum`),
   role: z.enum(["ADMIN", "VENDEUR"]).default("VENDEUR"),
 });
@@ -126,6 +130,8 @@ const updateUserSchema = z.object({
   nom: z.string().trim().min(1, "Nom requis").max(120).optional(),
   email: optionnel.refine((v) => !v || z.string().email().safeParse(v).success, "Email invalide"),
   telephone: optionnel,
+  voiture: optionnel,
+  matriculeVoiture: optionnel,
   actif: z.boolean().optional(),
 });
 

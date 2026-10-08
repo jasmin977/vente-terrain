@@ -32,6 +32,9 @@ async function main() {
     update: {},
   });
 
+  // Catalogue (ordre de la liste de prix). Sans photo : image par défaut.
+  // prixAchat 0 = prix d'achat non renseigné (exclu du calcul de marge) ;
+  // codeBarre null = pas encore de code-barres.
   const produitsCire = [
     {
       code: "010001",
@@ -122,6 +125,50 @@ async function main() {
       prixAchat: 2.7,
     },
     {
+      code: "010009",
+      codeBarre: null,
+      designation: "SERUM FIXATION MOYENNE",
+      marque: "MR JOCKER",
+      unit: "30 ML",
+      img: "/articles/010009.jpg",
+      colisage: 5,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "010010",
+      codeBarre: null,
+      designation: "SERUM FORTE FIXATION",
+      marque: "MR JOCKER",
+      unit: "30 ML",
+      img: "/articles/010010.jpg",
+      colisage: 5,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "010011",
+      codeBarre: null,
+      designation: "PRESENTOIRE GEL CIRE CREME",
+      marque: "MR JOCKER",
+      unit: "12 ML",
+      img: "/articles/default.svg",
+      colisage: 1,
+      prixVente: 15,
+      prixAchat: 0,
+    },
+    {
+      code: "010012",
+      codeBarre: null,
+      designation: "PRESENTOIRE GEL CIRE GUMMY",
+      marque: "MR JOCKER",
+      unit: "12 ML",
+      img: "/articles/default.svg",
+      colisage: 1,
+      prixVente: 15,
+      prixAchat: 0,
+    },
+    {
       code: "020001",
       codeBarre: "3012345000002",
       designation: "CIRE WAX FLEXIBLE",
@@ -144,6 +191,94 @@ async function main() {
       prixAchat: 2.0,
     },
     {
+      code: "020003",
+      codeBarre: null,
+      designation: "ROLL'ON ROUGE",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020003.jpg",
+      colisage: 6,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "020004",
+      codeBarre: null,
+      designation: "ROLL'ON ROSE",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020004.jpg",
+      colisage: 6,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "020005",
+      codeBarre: null,
+      designation: "ROLL'ON VERT",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020005.jpg",
+      colisage: 6,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "020006",
+      codeBarre: null,
+      designation: "ROLL'ON BLEU",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020006.jpg",
+      colisage: 6,
+      prixVente: 5,
+      prixAchat: 0,
+    },
+    {
+      code: "020007",
+      codeBarre: null,
+      designation: "SERUM VANILLE",
+      marque: "VEVO",
+      unit: "100 ML",
+      img: "/articles/020007.jpg",
+      colisage: 6,
+      prixVente: 8,
+      prixAchat: 0,
+    },
+    {
+      code: "020008",
+      codeBarre: null,
+      designation: "SERUM NOIX DE COCO",
+      marque: "VEVO",
+      unit: "100 ML",
+      img: "/articles/020008.jpg",
+      colisage: 6,
+      prixVente: 8,
+      prixAchat: 0,
+    },
+    {
+      code: "020009",
+      codeBarre: null,
+      designation: "SERUM VANILLE",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020009.jpg",
+      colisage: 9,
+      prixVente: 5.5,
+      prixAchat: 0,
+    },
+    {
+      code: "020010",
+      codeBarre: null,
+      designation: "SERUM NOIX DE COCO",
+      marque: "VEVO",
+      unit: "50 ML",
+      img: "/articles/020010.jpg",
+      colisage: 9,
+      prixVente: 5.5,
+      prixAchat: 0,
+    },
+    {
       code: "020011",
       codeBarre: "3012345000002",
       designation: "CIRE WAX STRONG",
@@ -164,6 +299,61 @@ async function main() {
       colisage: 6,
       prixVente: 4,
       prixAchat: 2.0,
+    },
+    {
+      code: "020013",
+      codeBarre: null,
+      designation: "PRESENTOIR 50 DOSES GEL CIRE",
+      marque: "VEVO",
+      unit: "12 ML",
+      img: "/articles/default.svg",
+      colisage: 1,
+      prixVente: 15,
+      prixAchat: 0,
+    },
+    {
+      code: "020014",
+      codeBarre: null,
+      designation: "PRESENTOIR 50 DOSES SHAMPOING CIRE",
+      marque: "VEVO",
+      unit: "10 ML",
+      img: "/articles/default.svg",
+      colisage: 1,
+      prixVente: 13,
+      prixAchat: 0,
+    },
+    {
+      code: "020015",
+      codeBarre: null,
+      designation: "PRESENTOIR 50 DOSES CREME A RASER",
+      marque: "VEVO",
+      unit: "10 ML",
+      img: "/articles/default.svg",
+      colisage: 1,
+      prixVente: 15,
+      prixAchat: 0,
+    },
+    {
+      code: "020017",
+      codeBarre: null,
+      designation: "PRESENTOIRE PERFUM STYLO",
+      marque: "VEVO",
+      unit: "20 ML",
+      img: "/articles/020017.jpg",
+      colisage: 12,
+      prixVente: 45,
+      prixAchat: 0,
+    },
+    {
+      code: "020018",
+      codeBarre: null,
+      designation: "CREME A RASER",
+      marque: "VEVO",
+      unit: "200 ML",
+      img: "/articles/default.svg",
+      colisage: 6,
+      prixVente: 27,
+      prixAchat: 0,
     },
   ];
 
@@ -192,9 +382,14 @@ async function main() {
   // premier chargement camion depuis l'app.
 
   console.log("Seed terminé. Comptes:");
-  const affiche = (mdp: string, variable: string) => (process.env[variable] ? `(${variable})` : mdp);
-  console.log(`  admin  -> code=ADMIN   mot de passe=${affiche(motDePasseAdmin, "SEED_ADMIN_PASSWORD")}`);
-  console.log(`  vendeur-> code=V001    mot de passe=${affiche(motDePasseVendeur, "SEED_VENDEUR_PASSWORD")}`);
+  const affiche = (mdp: string, variable: string) =>
+    process.env[variable] ? `(${variable})` : mdp;
+  console.log(
+    `  admin  -> code=ADMIN   mot de passe=${affiche(motDePasseAdmin, "SEED_ADMIN_PASSWORD")}`,
+  );
+  console.log(
+    `  vendeur-> code=V001    mot de passe=${affiche(motDePasseVendeur, "SEED_VENDEUR_PASSWORD")}`,
+  );
 }
 
 main()

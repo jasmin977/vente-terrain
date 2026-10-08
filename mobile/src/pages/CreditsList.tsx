@@ -7,14 +7,6 @@ import { texteCorrespond } from "../utils/articleSearch";
 import { EmptyState, Money, Row, Section, SkeletonList, Tag } from "../ui";
 import { t, tn } from "../i18n";
 
-/** Textes de date sur lesquels une recherche peut porter : « 6 oct. 2026 », « 06/10/2026 ». */
-function textesDate(iso: string) {
-  const d = new Date(iso);
-  const jj = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${formatDate(iso)} ${jj}/${mm}/${d.getFullYear()} ${jj}-${mm}-${d.getFullYear()}`;
-}
-
 interface Props {
   credits: CreditClient[];
   loading: boolean;
@@ -24,9 +16,9 @@ interface Props {
 }
 
 /**
- * Factures à crédit impayées, regroupées par client. Recherche sur le client
- * (nom, code, ville) ou sur la facture (date, numéro) : dans ce dernier cas,
- * seules les factures correspondantes du client sont affichées.
+ * Bons de livraison à crédit impayés, regroupés par client. Recherche sur le
+ * client (nom, code, ville) ou sur le N° du bon : dans ce dernier cas, seuls
+ * les bons correspondants du client sont affichés.
  */
 export default function CreditsList({ credits, loading, query, onPayer, onAvance }: Props) {
   const groupes = useMemo(() => {
@@ -36,7 +28,7 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
       .map((g) => {
         const clientOk = texteCorrespond(`${g.client.nomCommerce} ${g.client.code} ${g.client.ville ?? ""}`, q);
         if (clientOk) return g;
-        const factures = g.factures.filter((f) => texteCorrespond(`${f.numero} ${textesDate(f.date)}`, q));
+        const factures = g.factures.filter((f) => texteCorrespond(f.numero, q));
         return factures.length ? { ...g, factures } : null;
       })
       .filter((g): g is CreditClient => g !== null);
@@ -52,7 +44,7 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
       <EmptyState
         icon={walletOutline}
         title={t("Aucun crédit en cours.")}
-        message={t("Les factures à crédit non réglées apparaîtront ici, regroupées par client.")}
+        message={t("Les bons de livraison à crédit non réglés apparaîtront ici, regroupés par client.")}
       />
     );
   }
@@ -63,12 +55,12 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
         <p className="rc-summary__label">{t("Total des crédits clients")}</p>
         <Money value={totalDu} size="xl" tone="danger" />
         <span className="rc-summary__sub">
-          {tn(credits.length, "{n} client", "{n} clients")} · {tn(nbFactures, "{n} facture impayée", "{n} factures impayées")}
+          {tn(credits.length, "{n} client", "{n} clients")} · {tn(nbFactures, "{n} bon de livraison impayé", "{n} bons de livraison impayés")}
         </span>
       </div>
 
       {groupes.length === 0 ? (
-        <EmptyState icon={walletOutline} title={t("Aucun résultat.")} message={t("Cherchez par nom de client ou par date (ex : 06/10/2026, 6 oct.).")} />
+        <EmptyState icon={walletOutline} title={t("Aucun résultat.")} message={t("Cherchez par nom de client, code, ville ou N° de bon.")} />
       ) : (
         groupes.map((g) => {
           return (
@@ -79,7 +71,7 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
                   <span className="rc-credit__who">
                     <span className="rc-credit__name">{g.client.nomCommerce}</span>
                     <span className="rc-row__meta">
-                      {joinMeta([g.client.code, g.client.ville, tn(g.factures.length, "{n} facture", "{n} factures")])}
+                      {joinMeta([g.client.code, g.client.ville, tn(g.factures.length, "{n} bon de livraison", "{n} bons de livraison")])}
                     </span>
                   </span>
                   <span className="rc-row__trail">
@@ -106,7 +98,7 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
                         {f.paye > 0 && <Tag tone="warning">{t("Partiel")}</Tag>}
                       </>
                     }
-                    aria-label={t("Facture du {date}, reste {m} TND. Payer", { date: formatDate(f.date), m: formatAmount(f.reste) })}
+                    aria-label={t("Bon de livraison du {date}, reste {m} TND. Payer", { date: formatDate(f.date), m: formatAmount(f.reste) })}
                   />
                 ))}
               </div>

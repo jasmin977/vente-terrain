@@ -132,7 +132,7 @@ export default function Clients() {
         {vue === "clients" ? (
           <SearchField value={query} onChange={setQuery} placeholder={t("Code, commerce, ville…")} />
         ) : (
-          <SearchField value={creditQuery} onChange={setCreditQuery} placeholder={t("Client ou date (06/10/2026)…")} />
+          <SearchField value={creditQuery} onChange={setCreditQuery} placeholder={t("Client ou N° de bon…")} />
         )}
       </AppHeader>
 

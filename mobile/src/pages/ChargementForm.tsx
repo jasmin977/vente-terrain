@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { IonContent, IonPage, useIonViewWillEnter } from "@ionic/react";
 import { addOutline, checkmarkOutline } from "ionicons/icons";
 import { listArticles } from "../api/articles";
-import { createChargement, createEntreeDepot, getStockCamion, getStockDepot } from "../api/stock";
+import { createChargement, createEntreeDepot, getNumeroSuivant, getStockCamion, getStockDepot } from "../api/stock";
 import { listUsers } from "../api/auth";
 import type { Article } from "../types/article";
 import type { UserSummary } from "../types/auth";
@@ -23,7 +23,6 @@ import {
   PickerField,
   PickerSheet,
   Section,
-  Segmented,
   Stepper,
 } from "../ui";
 import { t } from "../i18n";
@@ -35,24 +34,35 @@ interface Line {
   pieces: number;
 }
 
-type Sens = "CHARGEMENT" | "RETOUR";
+type Kind = "chargement" | "retour" | "entree";
+
+// Libellés de chaque bon : titre de l'écran, champ N° et type de numérotation.
+const BONS = {
+  entree: { titre: "Bon d'entrée", numero: "N° bon d'entrée", type: "ENTREE" },
+  chargement: { titre: "Bon de chargement", numero: "N° bon de sortie", type: "SORTIE" },
+  retour: { titre: "Bon de retour", numero: "N° bon de retour", type: "RETOUR" },
+} as const;
 
 /**
- * Mouvements de stock saisis par l'admin :
- * - kind="chargement" : dépôt → camion (ou retour camion → dépôt) pour un vendeur ;
- * - kind="entree"     : réception de marchandise au dépôt.
+ * Bons saisis par l'admin :
+ * - kind="entree"     : réception de marchandise au dépôt (bon d'entrée) ;
+ * - kind="chargement" : dépôt → camion d'un vendeur (bon de chargement / sortie) ;
+ * - kind="retour"     : camion → dépôt (bon de retour).
+ * Le N° est proposé automatiquement (2026-0001…) et reste modifiable.
  */
-export default function ChargementForm({ kind = "chargement" }: { kind?: "chargement" | "entree" }) {
+export default function ChargementForm({ kind = "chargement" }: { kind?: Kind }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const entree = kind === "entree";
+  const sens = kind === "retour" ? "RETOUR" : "CHARGEMENT";
+  const bon = BONS[kind];
 
   const [vendeurs, setVendeurs] = useState<UserSummary[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [depot, setDepot] = useState<Map<string, number>>(new Map());
   const [camion, setCamion] = useState<Map<string, number>>(new Map());
   const [vendeurId, setVendeurId] = useState<string | undefined>(undefined);
-  const [sens, setSens] = useState<Sens>("CHARGEMENT");
   const [reference, setReference] = useState("");
   const [lignes, setLignes] = useState<Line[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +95,19 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: "charge
       .catch(() => setCamion(new Map()));
   }, [entree, vendeurId, visite]);
 
+  // N° proposé à chaque arrivée sur l'écran, sauf si un N° est déjà saisi.
+  useEffect(() => {
+    getNumeroSuivant(bon.type)
+      .then(({ numero }) => setReference((r) => r || numero))
+      .catch(() => undefined); // l'admin peut toujours le saisir
+  }, [visite, bon.type]);
+
+  // Ouvert depuis la vue d'un camion : vendeur présélectionné.
+  useEffect(() => {
+    const depuis = (location.state as { vendeurId?: string } | null)?.vendeurId;
+    if (!entree && depuis) setVendeurId((v) => v ?? depuis);
+  }, [location.state, entree, visite]);
+
   const articleMap = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
   const colisage = (articleId: string) => Number(articleMap.get(articleId)?.colisage) || 1;
   const enUnites = (l: Line) => l.colis * colisage(l.articleId) + l.pieces;
@@ -112,6 +135,8 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: "charge
   const missing =
     !entree && !vendeurId
       ? t("Choisissez un vendeur")
+      : !reference.trim()
+      ? t("Saisissez le N° du bon")
       : lignes.length === 0
       ? t("Ajoutez au moins un article")
       : lignes.some((l) => !(enUnites(l) > 0))
@@ -144,7 +169,6 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: "charge
       setLignes([]);
       setReference("");
       setVendeurId(undefined);
-      setSens("CHARGEMENT");
       navigate("/stock");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("Échec de l'enregistrement"));
@@ -165,47 +189,34 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: "charge
     }
     return t("Dépôt : {q}", { q: `${d} ${pieces(d)}` });
   };
-  const submitLabel = entree ? t("Enregistrer l'entrée") : sens === "CHARGEMENT" ? t("Valider le chargement") : t("Valider le retour");
+  const submitLabel = entree ? t("Enregistrer le bon d'entrée") : kind === "chargement" ? t("Valider le bon de chargement") : t("Valider le bon de retour");
+  const champNumero = (
+    <Field
+      label={t(bon.numero)}
+      value={reference}
+      onChange={setReference}
+      required
+      hint={t("Proposé automatiquement, modifiable.")}
+    />
+  );
 
   return (
     <IonPage>
-      <AppHeader backHref="/stock" title={entree ? t("Entrée dépôt") : t("Chargement camion")} />
+      <AppHeader backHref="/stock" title={t(bon.titre)} />
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
 
         {entree ? (
           <Section label={t("Réception")}>
-            <Field
-              label={t("Référence")}
-              placeholder={t("N° de bon de livraison (facultatif)")}
-              value={reference}
-              onChange={setReference}
-              hint={t("Les quantités reçues s'ajoutent au stock du dépôt.")}
-            />
+            <div className="rc-fields">
+              {champNumero}
+              <p className="rc-footnote">{t("Les quantités reçues s'ajoutent au stock du dépôt.")}</p>
+            </div>
           </Section>
         ) : (
           <>
-            <Section label={t("Sens")}>
-              <Segmented
-                label={t("Sens du mouvement")}
-                value={sens}
-                onChange={setSens}
-                options={[
-                  {
-                    value: "CHARGEMENT",
-                    label: t("Chargement"),
-                    hint: t("dépôt → camion"),
-                  },
-                  {
-                    value: "RETOUR",
-                    label: t("Retour"),
-                    hint: t("camion → dépôt"),
-                  },
-                ]}
-              />
-            </Section>
-            <Section label={t("Vendeur")}>
+            <Section label={kind === "chargement" ? t("Dépôt → camion") : t("Camion → dépôt")}>
               <div className="rc-fields">
                 <PickerField
                   label={t("Camion du vendeur")}
@@ -215,12 +226,7 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: "charge
                   meta={vendeur?.code}
                   onOpen={() => setVendeurSheet(true)}
                 />
-                <Field
-                  label={t("Référence")}
-                  placeholder={sens === "CHARGEMENT" ? t("N° de bon de chargement (facultatif)") : t("N° de bon de retour (facultatif)")}
-                  value={reference}
-                  onChange={setReference}
-                />
+                {champNumero}
               </div>
             </Section>
           </>

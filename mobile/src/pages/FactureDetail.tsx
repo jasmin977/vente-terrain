@@ -11,9 +11,11 @@ import { formatAmount, formatDateTime } from "../utils/format";
 import { modePaiementLabel, statutLabel, typeVenteLabel, typeVenteTone } from "../utils/labels";
 import { useAuth } from "../auth/AuthContext";
 import { printReceipt } from "../utils/receipt";
+import { imprimerBonLivraisonImprimante, telechargerBonLivraisonA4 } from "../utils/bonPdf";
 import { getPrinterIp, setPrinterIp } from "../lib/printerSettings";
 import { ActionBar, AppHeader, Button, Group, Money, Notice, PageNotice, Row, Section, SkeletonList, Tag } from "../ui";
 import ReglementTag from "../components/ReglementTag";
+import TelechargerA4Button from "../components/TelechargerA4Button";
 import FactureLocation from "../components/FactureLocation";
 import { t } from "../i18n";
 
@@ -28,6 +30,37 @@ export default function FactureDetail() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [telechargement, setTelechargement] = useState(false);
+  const [impressionA4, setImpressionA4] = useState(false);
+
+  // Imprimante classique (A4) : écran « Imprimer » d'Android.
+  const imprimerA4 = async () => {
+    if (!facture) return;
+    setImpressionA4(true);
+    setError(null);
+    try {
+      await imprimerBonLivraisonImprimante(facture);
+    } catch (err) {
+      setError(t("Impression impossible : {e}", { e: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setImpressionA4(false);
+    }
+  };
+
+  const telechargerA4 = async () => {
+    if (!facture) return;
+    setTelechargement(true);
+    setError(null);
+    try {
+      await telechargerBonLivraisonA4(facture);
+    } catch (err) {
+      // Partage annulé par l'utilisateur : pas une erreur.
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/cancel/i.test(message)) setError(t("Impossible de générer le bon de livraison : {e}", { e: message }));
+    } finally {
+      setTelechargement(false);
+    }
+  };
   const [askPrinterIp, setAskPrinterIp] = useState(false);
 
   useEffect(() => {
@@ -35,7 +68,7 @@ export default function FactureDetail() {
       try {
         setFacture(await getFacture(id!));
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : t("Facture introuvable"));
+        setError(err instanceof ApiError ? err.message : t("Bon de livraison introuvable"));
       } finally {
         setLoading(false);
       }
@@ -81,15 +114,31 @@ export default function FactureDetail() {
 
   return (
     <IonPage>
-      <AppHeader backHref="/factures" title={facture?.numero ?? t("Facture")} />
+      <AppHeader
+        backHref="/factures"
+        title={facture?.numero ?? t("Bon de livraison")}
+        actions={
+          facture && (
+            <>
+              <TelechargerA4Button label={t("Télécharger le bon de livraison en A4")} enCours={telechargement} onClick={telechargerA4} />
+              <TelechargerA4Button
+                icon={printOutline}
+                label={t("Imprimer en A4 (imprimante)")}
+                enCours={impressionA4}
+                onClick={imprimerA4}
+              />
+            </>
+          )
+        }
+      />
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
         {facture?.erreurSync ? (
-          <PageNotice>{t("Le serveur a refusé cette facture : {e}", { e: facture.erreurSync })}</PageNotice>
+          <PageNotice>{t("Le serveur a refusé ce bon de livraison : {e}", { e: facture.erreurSync })}</PageNotice>
         ) : facture?.enAttente ? (
           <Section>
-            <Notice tone="warning">{t("Facture enregistrée sur le téléphone : elle sera envoyée au serveur à la prochaine synchronisation.")}</Notice>
+            <Notice tone="warning">{t("Bon de livraison enregistré sur le téléphone : il sera envoyé au serveur à la prochaine synchronisation.")}</Notice>
           </Section>
         ) : null}
 
@@ -195,7 +244,7 @@ export default function FactureDetail() {
                   loading={cancelling}
                   onClick={() => setConfirmCancel(true)}
                 >
-                  {t("Annuler la facture")}
+                  {t("Annuler le bon de livraison")}
                 </Button>
               </Section>
             )}
@@ -205,11 +254,11 @@ export default function FactureDetail() {
         <IonAlert
           isOpen={confirmCancel}
           onDidDismiss={() => setConfirmCancel(false)}
-          header={t("Annuler la facture ?")}
+          header={t("Annuler le bon de livraison ?")}
           message={t("Le stock camion sera réintégré. Cette action est définitive.")}
           buttons={[
             { text: t("Non"), role: "cancel" },
-            { text: t("Annuler la facture"), role: "destructive", handler: handleCancel },
+            { text: t("Annuler le bon de livraison"), role: "destructive", handler: handleCancel },
           ]}
         />
 

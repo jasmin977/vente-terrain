@@ -91,7 +91,7 @@ export default function Factures() {
           : { dateFrom, dateTo };
       setFactures(await listFactures({ vendeurId, ...range }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("Impossible de charger les factures"));
+      setError(err instanceof ApiError ? err.message : t("Impossible de charger les bons de livraison"));
     } finally {
       setLoading(false);
     }
@@ -149,7 +149,7 @@ export default function Factures() {
 
   return (
     <IonPage>
-      <AppHeader large eyebrow={formatLongDate(new Date())} title={t("Factures")} actions={<AccountButton />}>
+      <AppHeader large eyebrow={formatLongDate(new Date())} title={t("Bons de livraison")} actions={<AccountButton />}>
         {isAdmin && (
           <div>
             <FilterChip
@@ -230,7 +230,7 @@ export default function Factures() {
           <p className="rc-summary__label">{periodeLabel} · {t("Total TTC")}</p>
           <Money value={stats.total} size="xl" />
           <span className="rc-summary__sub">
-            {tn(stats.count, "{n} facture", "{n} factures")}
+            {tn(stats.count, "{n} bon de livraison", "{n} bons de livraison")}
           </span>
           <div className="rc-summary__split">
             <SplitBar
@@ -258,12 +258,12 @@ export default function Factures() {
           ) : !error && factures.length === 0 ? (
             <EmptyState
               icon={documentTextOutline}
-              title={t("Aucune facture pour cette période.")}
+              title={t("Aucun bon de livraison pour cette période.")}
               message={t("Les ventes enregistrées apparaîtront ici.")}
               action={
                 canCreate && (
                   <Button variant="secondary" icon={addOutline} onClick={() => navigate("/factures/new")}>
-                    {t("Nouvelle facture")}
+                    {t("Nouveau bon de livraison")}
                   </Button>
                 )
               }
@@ -310,7 +310,7 @@ export default function Factures() {
         {canCreate && (
           <>
             <FabSpacer />
-            <Fab icon={addOutline} label={t("Nouvelle facture")} onClick={() => navigate("/factures/new")} />
+            <Fab icon={addOutline} label={t("Nouveau bon de livraison")} onClick={() => navigate("/factures/new")} />
           </>
         )}
       </IonContent>

@@ -175,7 +175,7 @@ export default function FactureForm() {
       printReceipt(facture);
       navigate(`/factures/${facture.id}`, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("Échec de la création de la facture"));
+      setError(err instanceof ApiError ? err.message : t("Échec de la création du bon de livraison"));
     } finally {
       setSaving(false);
     }
@@ -186,7 +186,7 @@ export default function FactureForm() {
 
   return (
     <IonPage>
-      <AppHeader backHref="/factures" title={t("Nouvelle facture")} />
+      <AppHeader backHref="/factures" title={t("Nouveau bon de livraison")} />
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
@@ -296,7 +296,7 @@ export default function FactureForm() {
             onClick={handleSubmit}
             style={{ flex: "0 0 auto" }}
           >
-            {t("Valider la facture")}
+            {t("Valider le bon de livraison")}
           </Button>
         </div>
       </ActionBar>

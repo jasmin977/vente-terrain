@@ -18,6 +18,8 @@ export interface UserSummary {
   nom: string;
   email?: string | null;
   telephone?: string | null;
+  voiture?: string | null;
+  matriculeVoiture?: string | null;
   role: Role;
   actif: boolean;
   createdAt?: string;
@@ -28,4 +30,7 @@ export interface UserInput {
   nom: string;
   email?: string | null;
   telephone?: string | null;
+  /** Véhicule, imprimé sur les bons de sortie. */
+  voiture?: string | null;
+  matriculeVoiture?: string | null;
 }

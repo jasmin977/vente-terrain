@@ -40,7 +40,16 @@ export interface Facture {
   latitude?: number | null;
   longitude?: number | null;
   lignes: LigneFacture[];
-  client?: { id: string; nomCommerce: string; code: string; latitude?: number | null; longitude?: number | null };
+  client?: {
+    id: string;
+    nomCommerce: string;
+    code: string;
+    adresse?: string | null;
+    ville?: string | null;
+    telephone?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  };
   /** Détail et réponse de création (absent des listes). */
   vendeur?: { id: string; nom: string; code: string };
   /** Créée sur le téléphone, pas encore envoyée au serveur. */

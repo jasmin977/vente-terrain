@@ -2,21 +2,15 @@ import EscPosPrinter from "../plugins/escPosPrinter";
 import { getPrinterIp } from "../lib/printerSettings";
 import type { Facture } from "../types/facture";
 import { formatMoney } from "./format";
+import { SOCIETE } from "./societe";
 
 const ESC = 0x1b;
 const GS = 0x1d;
 const LINE_WIDTH = 42; // environ 42 caractères par ligne sur un ticket 80mm
 
-// En-tête du ticket. TODO : remplacer le matricule fiscal provisoire par le vrai.
-const SOCIETE = {
-  nom: "BONNE AFFAIRE REVIVE COSMETIX",
-  activite: "Fabrication de parfums et de cosmétiques",
-  matriculeFiscal: "0000000/A/M/000",
-};
-
 // Les imprimantes thermiques n'impriment pas l'UTF-8 (page de code PC437 par
 // défaut) : « é » sortirait en « ├⌐ ». On imprime donc les lettres sans accent.
-const sansAccents = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+const sansAccents = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 function buildReceiptBytes(facture: Facture): Uint8Array {
   const encoder = new TextEncoder();
@@ -36,7 +30,7 @@ function buildReceiptBytes(facture: Facture): Uint8Array {
   text(`${SOCIETE.activite}\n`);
   text(`MF : ${SOCIETE.matriculeFiscal}\n`);
   text("\n");
-  text(`Facture ${facture.numero}\n`);
+  text(`Bon de livraison N° ${facture.numero}\n`);
   text(`${new Date(facture.date).toLocaleString()}\n`);
   raw([ESC, 0x61, 0x00]); // aligner à gauche
   text("-".repeat(LINE_WIDTH) + "\n");

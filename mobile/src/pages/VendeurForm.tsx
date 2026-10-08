@@ -33,7 +33,7 @@ import {
 import { t } from "../i18n";
 
 const MIN = 4;
-const vide: UserInput = { code: "", nom: "", telephone: "", email: "" };
+const vide: UserInput = { code: "", nom: "", telephone: "", email: "", voiture: "", matriculeVoiture: "" };
 
 /** Identifiants à transmettre au vendeur juste après création / réinitialisation. */
 interface Identifiants {
@@ -157,7 +157,14 @@ export default function VendeurForm() {
         } else {
           const u = await getUser(id!);
           setCompte(u);
-          setForm({ code: u.code, nom: u.nom, telephone: u.telephone ?? "", email: u.email ?? "" });
+          setForm({
+            code: u.code,
+            nom: u.nom,
+            telephone: u.telephone ?? "",
+            email: u.email ?? "",
+            voiture: u.voiture ?? "",
+            matriculeVoiture: u.matriculeVoiture ?? "",
+          });
         }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : t("Compte introuvable"));
@@ -306,6 +313,28 @@ export default function VendeurForm() {
                     autoCapitalize="off"
                     value={form.email ?? ""}
                     onChange={(v) => update("email", v)}
+                  />
+                </div>
+              </Group>
+            </Section>
+
+            <Section label={t("Véhicule")}>
+              <Group pad>
+                <div className="rc-fields">
+                  <Field
+                    label={t("Voiture")}
+                    value={form.voiture ?? ""}
+                    onChange={(v) => update("voiture", v)}
+                    autoCapitalize="words"
+                    placeholder={t("ex : Isuzu D-Max blanc")}
+                  />
+                  <Field
+                    label={t("Matricule")}
+                    value={form.matriculeVoiture ?? ""}
+                    onChange={(v) => update("matriculeVoiture", v)}
+                    autoCapitalize="characters"
+                    placeholder={t("ex : 250 TUN 2149")}
+                    hint={t("Imprimés sur les bons de sortie de ce vendeur.")}
                   />
                 </div>
               </Group>

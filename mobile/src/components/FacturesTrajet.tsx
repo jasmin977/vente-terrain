@@ -109,7 +109,7 @@ export default function FacturesTrajet({ factures, vendeurs }: Props) {
       ) : null}
       {nbSansPosition > 0 && (
         <p className="rc-footnote rc-trajet__note">
-          {tn(nbSansPosition, "{n} facture sans position (GPS désactivé ou refusé).", "{n} factures sans position (GPS désactivé ou refusé).")}
+          {tn(nbSansPosition, "{n} bon de livraison sans position (GPS désactivé ou refusé).", "{n} bons de livraison sans position (GPS désactivé ou refusé).")}
         </p>
       )}
     </Section>

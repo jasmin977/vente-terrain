@@ -103,7 +103,7 @@ export default function ClientForm() {
                       </span>
                     }
                     title={t("Historique")}
-                    meta={t("Factures, retours et paiements")}
+                    meta={t("Bons de livraison, retours et paiements")}
                     chevron
                   />
                 </Group>

@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(EscPosPrinterPlugin.class);
+        registerPlugin(PdfPrinterPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -114,6 +114,73 @@ stockRouter.get("/mouvements/articles", async (req, res) => {
   );
 });
 
+// Mouvements d'un article, camion par camion (fiche article de l'admin) :
+// chargé, retourné au dépôt, vendu, repris aux clients, ajusté, et stock actuel.
+stockRouter.get("/mouvements/par-article/:articleId", async (req, res) => {
+  const { articleId } = req.params;
+  try {
+    const [groupes, stocks] = await Promise.all([
+      prisma.mouvementStock.groupBy({
+        by: ["vendeurId", "sens"],
+        where: { articleId },
+        _sum: { quantite: true },
+        _max: { date: true },
+      }),
+      prisma.stockCamion.findMany({ where: { articleId }, select: { vendeurId: true, quantite: true } }),
+    ]);
+    const ids = [...new Set([...groupes.map((g) => g.vendeurId), ...stocks.map((s) => s.vendeurId)])];
+    const vendeurs = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, nom: true, code: true } });
+    const resultat = vendeurs.map((vendeur) => {
+      const r = { vendeur, charge: 0, retourDepot: 0, vendu: 0, retourClient: 0, ajuste: 0, stock: 0, dernier: null as Date | null };
+      for (const g of groupes.filter((x) => x.vendeurId === vendeur.id)) {
+        const q = Number(g._sum.quantite ?? 0);
+        if (g.sens === "CHARGEMENT") r.charge += q;
+        else if (g.sens === "RETOUR") r.retourDepot += q;
+        else if (g.sens === "VENTE") r.vendu += q;
+        else if (g.sens === "RETOUR_CLIENT") r.retourClient += q;
+        else r.ajuste += q; // AJUSTEMENT : déjà signé
+        if (g._max.date && (!r.dernier || g._max.date > r.dernier)) r.dernier = g._max.date;
+      }
+      r.stock = Number(stocks.find((x) => x.vendeurId === vendeur.id)?.quantite ?? 0);
+      return r;
+    });
+    res.json(resultat.sort((a, b) => a.vendeur.nom.localeCompare(b.vendeur.nom)));
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ---------------------------------------------------------------- Numéros des bons
+
+// Prochain N° proposé pour un bon d'entrée, de sortie (chargement) ou de retour :
+// « 2026-0001 », une suite par type, qui repart chaque année. Basé sur le plus
+// grand numéro déjà utilisé (bons supprimés compris) : un numéro n'est jamais
+// réattribué ; un N° saisi à la main dans un autre format est ignoré.
+stockRouter.get("/numero-suivant", async (req, res) => {
+  const type = req.query.type as string | undefined;
+  if (type !== "ENTREE" && type !== "SORTIE" && type !== "RETOUR") {
+    return res.status(400).json({ error: "type : ENTREE, SORTIE ou RETOUR" });
+  }
+  try {
+    const prefixe = `${new Date().getFullYear()}-`;
+    const where = { reference: { startsWith: prefixe } };
+    const references =
+      type === "ENTREE"
+        ? await prisma.entreeDepot.findMany({ where, select: { reference: true } })
+        : await prisma.chargementCamion.findMany({
+            where: { ...where, sens: type === "SORTIE" ? "CHARGEMENT" : "RETOUR" },
+            select: { reference: true },
+          });
+    const max = references.reduce((m, r) => {
+      const seq = r.reference?.match(/^\d{4}-(\d+)$/)?.[1];
+      return seq ? Math.max(m, Number(seq)) : m;
+    }, 0);
+    res.json({ numero: `${prefixe}${String(max + 1).padStart(4, "0")}` });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
 // ---------------------------------------------------------------- Dépôt
 
 // Tous les articles actifs avec leur quantité au dépôt (0 si jamais reçue).

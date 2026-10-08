@@ -112,9 +112,9 @@ facturesRouter.get("/:id", async (req, res) => {
       vendeur: { select: { id: true, nom: true, code: true } },
     },
   });
-  if (!facture) return res.status(404).json({ error: "Facture introuvable" });
+  if (!facture) return res.status(404).json({ error: "Bon de livraison introuvable" });
   if (req.user!.role === "VENDEUR" && !visiblePourVendeur(facture, req.user!.id)) {
-    return res.status(403).json({ error: "Seules les factures du jour sont consultables" });
+    return res.status(403).json({ error: "Seuls les bons de livraison du jour sont consultables" });
   }
   const reglement = (await reglementsFactures([facture])).get(facture.id) ?? null;
   res.json({ ...facture, reglement });
@@ -124,7 +124,7 @@ facturesRouter.get("/:id", async (req, res) => {
 // peut plus revenir en arrière (traçabilité des ventes sur le terrain).
 facturesRouter.post("/:id/annuler", requireAdmin, async (req, res) => {
   const facture = await prisma.facture.findUnique({ where: { id: req.params.id }, include: { lignes: true } });
-  if (!facture) return res.status(404).json({ error: "Facture introuvable" });
+  if (!facture) return res.status(404).json({ error: "Bon de livraison introuvable" });
 
   await prisma.$transaction(async (tx) => {
     for (const l of facture.lignes) {

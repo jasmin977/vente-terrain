@@ -55,9 +55,9 @@ export default function ClientHistorique() {
               </span>
             </div>
 
-            <Section label={t("Factures")} aside={data.factures.length > 0 ? `${data.factures.length}` : undefined}>
+            <Section label={t("Bons de livraison")} aside={data.factures.length > 0 ? `${data.factures.length}` : undefined}>
               {data.factures.length === 0 ? (
-                <EmptyLine>{t("Aucune facture")}</EmptyLine>
+                <EmptyLine>{t("Aucun bon de livraison")}</EmptyLine>
               ) : (
                 <Group>
                   {data.factures.map((f) => {

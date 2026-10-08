@@ -158,14 +158,14 @@ export default function Dashboard() {
       label: `${v.nom} (${v.code})`,
       value: v.montant,
       display: <Money value={v.montant} size="sm" />,
-      sub: tn(v.nbFactures, "{n} facture", "{n} factures"),
+      sub: tn(v.nbFactures, "{n} bon de livraison", "{n} bons de livraison"),
     }));
     const clients: BarRankingItem[] = d.topClients.map((c) => ({
       id: c.id,
       label: c.nomCommerce,
       value: c.montant,
       display: <Money value={c.montant} size="sm" />,
-      sub: tn(c.nb, "{n} facture", "{n} factures"),
+      sub: tn(c.nb, "{n} bon de livraison", "{n} bons de livraison"),
     }));
     const produits: BarRankingItem[] = d.topProduits.map((p) => ({
       id: p.articleId,
@@ -179,7 +179,7 @@ export default function Dashboard() {
       label: c.client?.nomCommerce ?? "—",
       value: c.totalDu,
       display: <Money value={c.totalDu} size="sm" />,
-      sub: c.plusAncienne ? t("Plus ancienne facture : {d}", { d: formatLongDate(c.plusAncienne) }) : undefined,
+      sub: c.plusAncienne ? t("Plus ancien bon de livraison : {d}", { d: formatLongDate(c.plusAncienne) }) : undefined,
     }));
 
     return (
@@ -190,7 +190,7 @@ export default function Dashboard() {
           </p>
           <Money value={ca.ttc} size="xl" />
           <span className="rc-summary__sub">
-            {tn(ca.nbFactures, "{n} facture", "{n} factures")}
+            {tn(ca.nbFactures, "{n} bon de livraison", "{n} bons de livraison")}
             {ca.nbFactures > 0 && <> · {t("panier moyen")} <Money value={ca.panierMoyen} size="sm" /></>}
           </span>
           <Evolution d={d} moisPasse={moisPasse} />

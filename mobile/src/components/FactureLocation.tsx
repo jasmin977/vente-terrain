@@ -33,7 +33,7 @@ export default function FactureLocation({ facture, client }: { facture: Point; c
   if (!aUnePosition(facture)) {
     return (
       <Section label={t("Position")}>
-        <Notice tone="info">{t("Aucune position enregistrée pour cette facture (GPS désactivé ou refusé).")}</Notice>
+        <Notice tone="info">{t("Aucune position enregistrée pour ce bon de livraison (GPS désactivé ou refusé).")}</Notice>
       </Section>
     );
   }
@@ -47,7 +47,7 @@ export default function FactureLocation({ facture, client }: { facture: Point; c
   return (
     <Section label={t("Position")}>
       <div className="rc-map">
-        <iframe title={t("Carte de la position de la facture")} src={carte} loading="lazy" referrerPolicy="no-referrer" />
+        <iframe title={t("Carte de la position du bon de livraison")} src={carte} loading="lazy" referrerPolicy="no-referrer" />
       </div>
       <Group>
         <Row
