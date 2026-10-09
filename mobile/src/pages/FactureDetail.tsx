@@ -116,9 +116,10 @@ export default function FactureDetail() {
     <IonPage>
       <AppHeader
         backHref="/factures"
-        title={facture?.numero ?? t("Bon de livraison")}
+        title={facture?.numero ?? t("B° Livraison")}
+        // A4 (téléchargement, imprimante classique) : réservé à l'admin ; le vendeur imprime le ticket.
         actions={
-          facture && (
+          isAdmin && facture && (
             <>
               <TelechargerA4Button label={t("Télécharger le bon de livraison en A4")} enCours={telechargement} onClick={telechargerA4} />
               <TelechargerA4Button

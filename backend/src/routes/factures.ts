@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { creerFacture } from "../services/factureService";
 import { prochainNumeroFacture } from "../utils/numero";
 import { reglementsFactures } from "../services/creditService";
 
 export const facturesRouter = Router();
-facturesRouter.use(requireAuth);
+facturesRouter.use(requireAuth, requireSociete);
 
 const ligneSchema = z.object({
   articleId: z.string().uuid(),
@@ -48,7 +48,7 @@ facturesRouter.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   try {
-    const facture = await creerFacture(req.user!.id, parsed.data);
+    const facture = await creerFacture(req.user!.id, parsed.data, req.societeId!);
     res.status(201).json(facture);
   } catch (err) {
     res.status(409).json({ error: (err as Error).message });
@@ -82,6 +82,7 @@ facturesRouter.get("/", async (req, res) => {
   const factures = await prisma.facture.findMany({
     where: {
       deletedAt: null,
+      client: { societeId: req.societeId },
       ...(clientId ? { clientId } : {}),
       ...(vendeurId ? { vendeurId } : {}),
       ...(dateFrom || dateToInclusive
@@ -103,8 +104,8 @@ facturesRouter.get("/", async (req, res) => {
 });
 
 facturesRouter.get("/:id", async (req, res) => {
-  const facture = await prisma.facture.findUnique({
-    where: { id: req.params.id },
+  const facture = await prisma.facture.findFirst({
+    where: { id: req.params.id, client: { societeId: req.societeId } },
     include: {
       lignes: { include: { article: true } },
       client: true,
@@ -123,29 +124,41 @@ facturesRouter.get("/:id", async (req, res) => {
 // Seul l'admin peut annuler une facture : une fois validée, le vendeur ne
 // peut plus revenir en arrière (traçabilité des ventes sur le terrain).
 facturesRouter.post("/:id/annuler", requireAdmin, async (req, res) => {
-  const facture = await prisma.facture.findUnique({ where: { id: req.params.id }, include: { lignes: true } });
-  if (!facture) return res.status(404).json({ error: "Bon de livraison introuvable" });
-
-  await prisma.$transaction(async (tx) => {
-    for (const l of facture.lignes) {
-      await tx.stockCamion.upsert({
-        where: { vendeurId_articleId: { vendeurId: facture.vendeurId, articleId: l.articleId } },
-        create: { vendeurId: facture.vendeurId, articleId: l.articleId, quantite: l.quantite },
-        update: { quantite: { increment: l.quantite } },
+  try {
+    const annule = await prisma.$transaction(async (tx) => {
+      // Relu dans la transaction : une double demande n'annule (et ne rend le stock) qu'une fois.
+      const facture = await tx.facture.findFirst({
+        where: { id: req.params.id, client: { societeId: req.societeId } },
+        include: { lignes: true },
       });
-      // Tracé dans les mouvements pour que l'historique du camion reste lisible.
-      await tx.mouvementStock.create({
-        data: {
-          vendeurId: facture.vendeurId,
-          articleId: l.articleId,
-          sens: "AJUSTEMENT",
-          quantite: l.quantite,
-          reference: `Annulation ${facture.numero}`,
-        },
-      });
-    }
-    await tx.facture.update({ where: { id: facture.id }, data: { statut: "ANNULEE" } });
-  });
-
-  res.status(204).send();
+      if (!facture) return "introuvable";
+      if (facture.statut === "ANNULEE") return "deja";
+      const maj = await tx.facture.updateMany({ where: { id: facture.id, statut: "VALIDEE" }, data: { statut: "ANNULEE" } });
+      if (maj.count === 0) return "deja";
+      for (const l of facture.lignes) {
+        await tx.stockCamion.upsert({
+          where: { vendeurId_articleId: { vendeurId: facture.vendeurId, articleId: l.articleId } },
+          create: { vendeurId: facture.vendeurId, articleId: l.articleId, quantite: l.quantite },
+          update: { quantite: { increment: l.quantite } },
+        });
+        // Tracé dans les mouvements pour que l'historique du camion reste lisible.
+        await tx.mouvementStock.create({
+          data: {
+            vendeurId: facture.vendeurId,
+            articleId: l.articleId,
+            sens: "AJUSTEMENT",
+            quantite: l.quantite,
+            reference: `Annulation ${facture.numero}`,
+          },
+        });
+      }
+      return "ok";
+    });
+    if (annule === "introuvable") return res.status(404).json({ error: "Bon de livraison introuvable" });
+    if (annule === "deja") return res.status(409).json({ error: "Ce bon de livraison est déjà annulé" });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });

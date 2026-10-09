@@ -7,7 +7,7 @@ const liveReload = process.env.LIVE_RELOAD === '1';
 
 const config: CapacitorConfig = {
   appId: 'com.bonneaffaire.venteterrain',
-  appName: 'Revive Cosmetix',
+  appName: 'Vente Terrain',
   webDir: 'dist',
   ...(liveReload && {
     server: {

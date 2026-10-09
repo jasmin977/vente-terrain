@@ -2,7 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 
 // Inventaires du stock camion — réservés à l'admin.
 //
@@ -13,7 +13,7 @@ import { requireAdmin, requireAuth } from "../middleware/auth";
 // est remplacé par les quantités réelles. Les articles non comptés gardent leur
 // quantité théorique.
 export const inventairesRouter = Router();
-inventairesRouter.use(requireAuth, requireAdmin);
+inventairesRouter.use(requireAuth, requireAdmin, requireSociete, ciblesDeLaSociete);
 
 const inventaireInclude = {
   vendeur: { select: { id: true, nom: true, code: true } },
@@ -97,7 +97,7 @@ inventairesRouter.get("/", async (req, res) => {
   try {
     const vendeurId = req.query.vendeurId as string | undefined;
     const inventaires = await prisma.inventaire.findMany({
-      where: vendeurId ? { vendeurId } : {},
+      where: { vendeur: { societeId: req.societeId }, ...(vendeurId ? { vendeurId } : {}) },
       include: inventaireInclude,
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -122,7 +122,10 @@ inventairesRouter.get("/", async (req, res) => {
 
 inventairesRouter.get("/:id", async (req, res) => {
   try {
-    const inv = await prisma.inventaire.findUnique({ where: { id: req.params.id }, include: inventaireInclude });
+    const inv = await prisma.inventaire.findFirst({
+      where: { id: req.params.id, vendeur: { societeId: req.societeId } },
+      include: inventaireInclude,
+    });
     if (!inv) return res.status(404).json({ error: "Inventaire introuvable" });
     const stock = inv.statut === "EN_COURS" ? await stockCamionMap(inv.vendeurId) : new Map();
     res.json(serialiser(inv, construireLignes(inv, stock)));
@@ -151,8 +154,8 @@ inventairesRouter.post("/", async (req, res) => {
   }
 });
 
-async function inventaireEnCours(id: string, res: Response) {
-  const inv = await prisma.inventaire.findUnique({ where: { id } });
+async function inventaireEnCours(id: string, res: Response, societeId: string) {
+  const inv = await prisma.inventaire.findFirst({ where: { id, vendeur: { societeId } } });
   if (!inv) {
     res.status(404).json({ error: "Inventaire introuvable" });
     return null;
@@ -174,8 +177,10 @@ inventairesRouter.put("/:id/lignes/:articleId", async (req, res) => {
   const parsed = ligneSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    const inv = await inventaireEnCours(req.params.id, res);
+    const inv = await inventaireEnCours(req.params.id, res, req.societeId!);
     if (!inv) return;
+    const article = await prisma.article.findFirst({ where: { id: req.params.articleId, societeId: req.societeId }, select: { id: true } });
+    if (!article) return res.status(404).json({ error: "Article introuvable" });
     // Surplus (compté au-delà du stock camion) : pas de motif, seulement une note.
     const stock = await prisma.stockCamion.findUnique({
       where: { vendeurId_articleId: { vendeurId: inv.vendeurId, articleId: req.params.articleId } },
@@ -199,7 +204,7 @@ inventairesRouter.put("/:id/lignes/:articleId", async (req, res) => {
 
 inventairesRouter.delete("/:id/lignes/:articleId", async (req, res) => {
   try {
-    const inv = await inventaireEnCours(req.params.id, res);
+    const inv = await inventaireEnCours(req.params.id, res, req.societeId!);
     if (!inv) return;
     await prisma.ligneInventaire.deleteMany({ where: { inventaireId: inv.id, articleId: req.params.articleId } });
     res.status(204).send();
@@ -212,7 +217,7 @@ inventairesRouter.delete("/:id/lignes/:articleId", async (req, res) => {
 // articles comptés par les quantités réelles.
 inventairesRouter.post("/:id/valider", async (req, res) => {
   try {
-    const inv = await inventaireEnCours(req.params.id, res);
+    const inv = await inventaireEnCours(req.params.id, res, req.societeId!);
     if (!inv) return;
     const lignes = await prisma.ligneInventaire.findMany({ where: { inventaireId: inv.id } });
     if (lignes.length === 0) {
@@ -265,7 +270,7 @@ inventairesRouter.post("/:id/valider", async (req, res) => {
 // Abandon d'un inventaire en cours (aucun effet sur le stock).
 inventairesRouter.delete("/:id", async (req, res) => {
   try {
-    const inv = await inventaireEnCours(req.params.id, res);
+    const inv = await inventaireEnCours(req.params.id, res, req.societeId!);
     if (!inv) return;
     await prisma.inventaire.delete({ where: { id: inv.id } });
     res.status(204).send();

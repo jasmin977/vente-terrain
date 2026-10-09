@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { plageDates } from "../utils/plage";
 
 // Historique des mouvements de stock saisis par l'admin, avec suppression.
@@ -10,7 +10,7 @@ import { plageDates } from "../utils/plage";
 // stock est rétabli (mouvements AJUSTEMENT tracés) et le document reste dans
 // l'historique, marqué supprimé (deletedAt).
 export const stockHistoriqueRouter = Router();
-stockHistoriqueRouter.use(requireAuth, requireAdmin);
+stockHistoriqueRouter.use(requireAuth, requireAdmin, requireSociete, ciblesDeLaSociete);
 
 class RefusSuppression extends Error {}
 
@@ -69,10 +69,11 @@ async function verifierSuppressionEntree(
     tx,
     parArticle(entree.lignes.map((l) => ({ articleId: l.articleId, pieces: Number(l.quantite) })))
   );
+  // L'admin peut toujours supprimer le bon : le dépôt peut alors devenir négatif.
   if (manques.length) {
     return {
-      possible: false,
-      raison: `Le dépôt n'a plus ces quantités (déjà chargées dans un camion ?) : ${manques.join(" ; ")}.`,
+      possible: true,
+      avertissement: `Le dépôt n'a plus toutes ces quantités (déjà chargées dans un camion ?) : il deviendra négatif pour ${manques.join(" ; ")}.`,
     };
   }
   return { possible: true };
@@ -82,7 +83,7 @@ stockHistoriqueRouter.get("/depot/entrees", async (req, res) => {
   try {
     const date = plageDates(req.query);
     const entrees = await prisma.entreeDepot.findMany({
-      where: date ? { date } : {},
+      where: { societeId: req.societeId, ...(date ? { date } : {}) },
       include: { admin: entreeInclude.admin, lignes: { select: { quantite: true } } },
       orderBy: { date: "desc" },
       take: 200,
@@ -97,7 +98,7 @@ stockHistoriqueRouter.get("/depot/entrees", async (req, res) => {
 
 stockHistoriqueRouter.get("/depot/entrees/:id", async (req, res) => {
   try {
-    const entree = await prisma.entreeDepot.findUnique({ where: { id: req.params.id }, include: entreeInclude });
+    const entree = await prisma.entreeDepot.findFirst({ where: { id: req.params.id, societeId: req.societeId }, include: entreeInclude });
     if (!entree) return res.status(404).json({ error: "Entrée introuvable" });
     const suppression = await verifierSuppressionEntree(prisma, entree);
     res.json({ ...entree, nbLignes: entree.lignes.length, totalPieces: totalPieces(entree.lignes), suppression });
@@ -110,16 +111,17 @@ stockHistoriqueRouter.get("/depot/entrees/:id", async (req, res) => {
 stockHistoriqueRouter.delete("/depot/entrees/:id", async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
-      const entree = await tx.entreeDepot.findUnique({ where: { id: req.params.id }, include: { lignes: true } });
+      const entree = await tx.entreeDepot.findFirst({ where: { id: req.params.id, societeId: req.societeId }, include: { lignes: true } });
       if (!entree) throw new RefusSuppression("Entrée introuvable");
       const verif = await verifierSuppressionEntree(tx, entree);
       if (!verif.possible) throw new RefusSuppression(verif.raison!);
 
       const reference = `Suppression entrée ${entree.reference ?? dateCourte(entree.date)}`;
       for (const l of entree.lignes) {
-        await tx.stockDepot.update({
+        await tx.stockDepot.upsert({
           where: { articleId: l.articleId },
-          data: { quantite: { decrement: l.quantite } },
+          create: { articleId: l.articleId, quantite: -Number(l.quantite) },
+          update: { quantite: { decrement: l.quantite } },
         });
         await tx.mouvementDepot.create({
           data: {
@@ -161,19 +163,19 @@ async function verifierSuppressionChargement(
 ): Promise<Verification> {
   if (ch.deletedAt) return { possible: false, raison: "Ce mouvement est déjà supprimé." };
 
-  // Un inventaire validé depuis a remplacé le stock camion par un comptage
-  // réel : annuler ce mouvement fausserait ce stock.
+  // L'admin peut toujours supprimer un bon de chargement ou de retour : le stock
+  // est rétabli en sens inverse. Les cas délicats sont signalés avant confirmation.
+  const avertissements: string[] = [];
+
+  // Un inventaire validé depuis a remplacé le stock camion par un comptage réel.
   const inventaire = await tx.inventaire.findFirst({
     where: { vendeurId: ch.vendeurId, statut: "VALIDE", dateValidation: { gt: ch.date } },
     orderBy: { dateValidation: "desc" },
   });
   if (inventaire) {
-    return {
-      possible: false,
-      raison: `Un inventaire de ce camion a été validé depuis (le ${dateCourte(
-        inventaire.dateValidation!
-      )}) : le stock a été recompté, ce mouvement ne peut plus être supprimé.`,
-    };
+    avertissements.push(
+      `Un inventaire de ce camion a été validé depuis (le ${dateCourte(inventaire.dateValidation!)}) : le stock camion recompté sera modifié.`
+    );
   }
 
   const pieces = parArticle(ch.lignes.map((l) => ({ articleId: l.articleId, pieces: piecesLigne(l) })));
@@ -181,8 +183,8 @@ async function verifierSuppressionChargement(
   if (ch.sens === "RETOUR") {
     // Supprimer un retour renvoie la marchandise du dépôt vers le camion.
     const manques = await manquesDepot(tx, pieces);
-    if (manques.length) return { possible: false, raison: `Le dépôt n'a plus ces quantités : ${manques.join(" ; ")}.` };
-    return { possible: true };
+    if (manques.length) avertissements.push(`Le dépôt deviendra négatif pour ${manques.join(" ; ")}.`);
+    return avertissements.length ? { possible: true, avertissement: avertissements.join(" ") } : { possible: true };
   }
 
   // Supprimer un chargement remet la marchandise au dépôt et la retire du
@@ -198,12 +200,10 @@ async function verifierSuppressionChargement(
       negatifs.push(`${nom} (camion : ${qte} → ${qte - p})`);
     }
   }
-  return negatifs.length
-    ? {
-        possible: true,
-        avertissement: `Une partie a déjà été vendue : le stock camion deviendra négatif pour ${negatifs.join(" ; ")}.`,
-      }
-    : { possible: true };
+  if (negatifs.length) {
+    avertissements.push(`Une partie a déjà été vendue : le stock camion deviendra négatif pour ${negatifs.join(" ; ")}.`);
+  }
+  return avertissements.length ? { possible: true, avertissement: avertissements.join(" ") } : { possible: true };
 }
 
 stockHistoriqueRouter.get("/chargements", async (req, res) => {
@@ -211,7 +211,7 @@ stockHistoriqueRouter.get("/chargements", async (req, res) => {
     const vendeurId = req.query.vendeurId as string | undefined;
     const date = plageDates(req.query);
     const chargements = await prisma.chargementCamion.findMany({
-      where: { ...(vendeurId ? { vendeurId } : {}), ...(date ? { date } : {}) },
+      where: { vendeur: { societeId: req.societeId }, ...(vendeurId ? { vendeurId } : {}), ...(date ? { date } : {}) },
       include: { vendeur: chargementInclude.vendeur, lignes: { include: { article: { select: { colisage: true } } } } },
       orderBy: { date: "desc" },
       take: 200,
@@ -230,7 +230,10 @@ stockHistoriqueRouter.get("/chargements", async (req, res) => {
 
 stockHistoriqueRouter.get("/chargements/:id", async (req, res) => {
   try {
-    const ch = await prisma.chargementCamion.findUnique({ where: { id: req.params.id }, include: chargementInclude });
+    const ch = await prisma.chargementCamion.findFirst({
+      where: { id: req.params.id, vendeur: { societeId: req.societeId } },
+      include: chargementInclude,
+    });
     if (!ch) return res.status(404).json({ error: "Mouvement introuvable" });
     const suppression = await verifierSuppressionChargement(prisma, ch);
     const lignes = ch.lignes.map((l) => ({ ...l, pieces: piecesLigne(l) }));
@@ -249,7 +252,10 @@ stockHistoriqueRouter.get("/chargements/:id", async (req, res) => {
 stockHistoriqueRouter.delete("/chargements/:id", async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
-      const ch = await tx.chargementCamion.findUnique({ where: { id: req.params.id }, include: chargementInclude });
+      const ch = await tx.chargementCamion.findFirst({
+        where: { id: req.params.id, vendeur: { societeId: req.societeId } },
+        include: chargementInclude,
+      });
       if (!ch) throw new RefusSuppression("Mouvement introuvable");
       const verif = await verifierSuppressionChargement(tx, ch);
       if (!verif.possible) throw new RefusSuppression(verif.raison!);
@@ -309,7 +315,7 @@ stockHistoriqueRouter.get("/ventes-par-article", async (req, res) => {
 
     const ventes = await prisma.ligneFacture.groupBy({
       by: ["articleId"],
-      where: { facture: { statut: "VALIDEE", deletedAt: null, date: { gte: depuis } } },
+      where: { facture: { statut: "VALIDEE", deletedAt: null, date: { gte: depuis }, client: { societeId: req.societeId } } },
       _sum: { quantite: true, montantHT: true },
     });
     res.json({

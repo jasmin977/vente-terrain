@@ -134,7 +134,7 @@ export function PayerFactureSheet({
           <Section>
             <Group>
               <Row compact label={t("Client")} trailing={<span className="rc-row__value">{client?.nomCommerce}</span>} />
-              <Row compact label={t("Bon de livraison")} trailing={<span className="rc-row__value">{facture.numero}</span>} />
+              <Row compact label={t("B° Livraison")} trailing={<span className="rc-row__value">{facture.numero}</span>} />
               <Row compact label={t("Date")} trailing={<span className="rc-row__value rc-num">{formatDate(facture.date)}</span>} />
               <Row compact label={t("Montant TTC")} trailing={<Money value={facture.montantTTC} />} />
               {facture.paye > 0 && <Row compact label={t("Déjà réglé")} trailing={<Money value={facture.paye} />} />}

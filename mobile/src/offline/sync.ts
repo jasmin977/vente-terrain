@@ -6,9 +6,10 @@ import type { Article } from "../types/article";
 import type { Client } from "../types/client";
 import type { CreditClient } from "../types/credit";
 import type { Facture } from "../types/facture";
-import { ecrireCache, ecrireDerniereSync, lireDerniereSync, recalerNumero } from "./cache";
+import { ecrireCache, ecrireDerniereSync, lireCache, lireDerniereSync, recalerNumero } from "./cache";
+import { chargerImagesHorsLigne, enregistrerImagesCatalogue, type ResultatImages } from "./images";
 import { lireFile, marquerErreur, retirer, surChangementFile, type ActionEnAttente } from "./file";
-import { modeHorsLigne } from "./stockage";
+import { ecrire, lire, modeHorsLigne } from "./stockage";
 
 const DELAI_ENVOI = 20_000;
 const DELAI_LECTURE = 15_000;
@@ -132,6 +133,29 @@ export function synchroniser(): Promise<ResultatSync> {
   return enCours;
 }
 
+/* ---------------------------------------------------------------- Catalogue du matin */
+
+export const lireMajCatalogue = () => lire<string | null>("maj-catalogue", null);
+
+/**
+ * Avant la tournée (avec réseau) : envoie les actions en attente, recharge
+ * articles, clients et crédits, puis enregistre les photos des articles sur le
+ * téléphone pour travailler hors ligne toute la journée.
+ */
+export async function mettreAJourCatalogue(
+  progression?: (fait: number, total: number) => void
+): Promise<{ sync: ResultatSync; images: ResultatImages | null }> {
+  const sync = await synchroniser();
+  if (sync.injoignable) return { sync, images: null };
+  const articles = await lireCache("articles");
+  const images = await enregistrerImagesCatalogue(
+    articles.map((a) => a.img),
+    progression
+  );
+  await ecrire("maj-catalogue", new Date().toISOString());
+  return { sync, images };
+}
+
 /** Synchronisation en arrière-plan, sans attendre ni signaler d'erreur. */
 export function declencherSync() {
   if (etat.enLigne) void synchroniser();
@@ -156,6 +180,7 @@ export function demarrerSyncAuto(): () => void {
     .then((s) => majEtat({ enLigne: s.connected }))
     .catch(() => undefined);
   lireDerniereSync().then((d) => majEtat({ derniereSync: d }));
+  void chargerImagesHorsLigne();
 
   Network.addListener("networkStatusChange", (s) => {
     majEtat({ enLigne: s.connected });

@@ -1,3 +1,5 @@
+import type { Societe } from "./societe";
+
 export type Role = "ADMIN" | "VENDEUR";
 
 export interface AuthUser {
@@ -5,6 +7,8 @@ export interface AuthUser {
   code: string;
   nom: string;
   role: Role;
+  /** Vendeur : sa société (en-tête des tickets, logo d'accueil) ; admin : null. */
+  societe?: Societe | null;
 }
 
 export interface LoginResponse {

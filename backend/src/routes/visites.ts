@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAuth, requireSociete } from "../middleware/auth";
 
 export const visitesRouter = Router();
-visitesRouter.use(requireAuth);
+visitesRouter.use(requireAuth, requireSociete, ciblesDeLaSociete);
 
 const visiteSchema = z.object({
   id: z.string().uuid().optional(),
@@ -19,6 +19,10 @@ visitesRouter.post("/", async (req, res) => {
   const parsed = visiteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data = parsed.data;
+  if (data.clientId) {
+    const c = await prisma.client.findFirst({ where: { id: data.clientId, societeId: req.societeId }, select: { id: true } });
+    if (!c) return res.status(404).json({ error: "Client introuvable" });
+  }
   const visite = await prisma.visite.create({
     data: { ...data, vendeurId: req.user!.id, date: data.date ?? new Date() },
   });
@@ -34,6 +38,7 @@ visitesRouter.get("/", async (req, res) => {
 
   const visites = await prisma.visite.findMany({
     where: {
+      vendeur: { societeId: req.societeId },
       ...(vendeurId ? { vendeurId } : {}),
       date: { gte: start, lte: end },
     },

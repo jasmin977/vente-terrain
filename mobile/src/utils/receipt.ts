@@ -2,7 +2,7 @@ import EscPosPrinter from "../plugins/escPosPrinter";
 import { getPrinterIp } from "../lib/printerSettings";
 import type { Facture } from "../types/facture";
 import { formatMoney } from "./format";
-import { SOCIETE } from "./societe";
+import { societeImprimee } from "./societe";
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -25,10 +25,13 @@ function buildReceiptBytes(facture: Facture): Uint8Array {
   raw([ESC, 0x40]); // initialiser l'imprimante
   raw([ESC, 0x61, 0x01]); // centrer
   raw([ESC, 0x45, 0x01]); // gras on
+  const SOCIETE = societeImprimee();
   text(`${SOCIETE.nom}\n`);
   raw([ESC, 0x45, 0x00]); // gras off
   text(`${SOCIETE.activite}\n`);
-  text(`MF : ${SOCIETE.matriculeFiscal}\n`);
+  if (SOCIETE.matriculeFiscal) text(`MF : ${SOCIETE.matriculeFiscal}\n`);
+  if (SOCIETE.adresse) text(`${SOCIETE.adresse}\n`);
+  if (SOCIETE.telephone) text(`Tel : ${SOCIETE.telephone}\n`);
   text("\n");
   text(`Bon de livraison N° ${facture.numero}\n`);
   text(`${new Date(facture.date).toLocaleString()}\n`);

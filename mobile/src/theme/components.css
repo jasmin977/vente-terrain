@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* Revive Cosmetix — component styles                                  */
+/* Vente Terrain — component styles                                  */
 /* One definition per component (src/ui/*). Screens never restyle a   */
 /* component locally; if a variant is needed it is added here.        */
 /* ------------------------------------------------------------------ */
@@ -2401,4 +2401,112 @@ a.rc-map__open {
 
 .rc-sync__note {
   padding: var(--rc-space-2) var(--rc-gutter) 0;
+}
+
+/* ================= Sociétés ================= */
+.rc-societe-logo {
+  flex-shrink: 0;
+  border-radius: var(--rc-radius-md);
+  object-fit: contain;
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-societe-logo--initiales {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rc-ink);
+  color: var(--rc-on-ink);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: none;
+}
+
+/* Ligne du choix de société : la ligne ouvre, le crayon modifie. */
+.rc-societe-ligne {
+  display: flex;
+  align-items: center;
+  padding-inline-end: var(--rc-space-2);
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-societe-ligne .rc-row {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.rc-media--compact {
+  padding: 0;
+}
+
+/* Écran d'accueil d'une société : son logo, son nom. */
+.rc-accueil-societe {
+  gap: var(--rc-space-3);
+  text-align: center;
+  padding-inline: var(--rc-gutter);
+}
+
+.rc-accueil-societe img.rc-societe-logo {
+  width: 112px;
+  height: 112px;
+}
+
+.rc-accueil-societe__nom {
+  margin: var(--rc-space-2) 0 0;
+  font-size: var(--rc-text-title);
+  font-weight: 800;
+  color: var(--rc-ink);
+  text-wrap: balance;
+}
+
+.rc-accueil-societe__activite {
+  margin: 0 0 var(--rc-space-4);
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+/* Démarrage guidé d'une société vide. */
+.rc-demarrage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+}
+
+.rc-etape {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-etape > ion-icon {
+  flex-shrink: 0;
+  font-size: 26px;
+  color: var(--rc-ink-3);
+}
+
+.rc-etape--faite > ion-icon {
+  color: var(--rc-positive);
+}
+
+.rc-etape__texte {
+  flex: 1;
+  min-width: 0;
+}
+
+.rc-etape__titre {
+  margin: 0;
+  font-weight: 800;
+  color: var(--rc-ink);
+}
+
+.rc-etape--faite .rc-etape__titre {
+  color: var(--rc-ink-2);
+}
+
+.rc-etape__detail {
+  margin: 2px 0 0;
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
 }

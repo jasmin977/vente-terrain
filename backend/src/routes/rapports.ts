@@ -1,10 +1,10 @@
 import { Router } from "express";
 import ExcelJS from "exceljs";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAuth, requireSociete } from "../middleware/auth";
 
 export const rapportsRouter = Router();
-rapportsRouter.use(requireAuth);
+rapportsRouter.use(requireAuth, requireSociete, ciblesDeLaSociete);
 
 function bornesDuJour(dateStr?: string) {
   const day = dateStr ? new Date(dateStr) : new Date();
@@ -22,7 +22,7 @@ rapportsRouter.get("/dashboard", async (req, res) => {
   const vid = vendeurId ?? req.user!.id;
 
   const factures = await prisma.facture.findMany({
-    where: { vendeurId: vid, statut: "VALIDEE", date: { gte: start, lte: end }, deletedAt: null },
+    where: { vendeurId: vid, statut: "VALIDEE", date: { gte: start, lte: end }, deletedAt: null, client: { societeId: req.societeId } },
     include: { lignes: { include: { article: true } }, paiements: true },
   });
 
@@ -75,13 +75,14 @@ rapportsRouter.get("/dashboard", async (req, res) => {
   });
 });
 
-async function lignesRapportJournalier(dateStr: string | undefined, vendeurId: string | undefined) {
+async function lignesRapportJournalier(dateStr: string | undefined, vendeurId: string | undefined, societeId: string) {
   const { start, end } = bornesDuJour(dateStr);
   const factures = await prisma.facture.findMany({
     where: {
       date: { gte: start, lte: end },
       statut: "VALIDEE",
       deletedAt: null,
+      client: { societeId },
       ...(vendeurId ? { vendeurId } : {}),
     },
     include: { lignes: { include: { article: true } }, client: true, vendeur: true },
@@ -120,13 +121,13 @@ async function lignesRapportJournalier(dateStr: string | undefined, vendeurId: s
 // Module 8 - Rapport Journalier (données brutes, pour affichage ou export côté mobile)
 rapportsRouter.get("/journalier", async (req, res) => {
   const { date, vendeurId } = req.query as Record<string, string | undefined>;
-  res.json(await lignesRapportJournalier(date, vendeurId));
+  res.json(await lignesRapportJournalier(date, vendeurId, req.societeId!));
 });
 
 // Module 8 - Export Excel XLSX du rapport journalier (colonnes du modèle fourni)
 rapportsRouter.get("/journalier.xlsx", async (req, res) => {
   const { date, vendeurId } = req.query as Record<string, string | undefined>;
-  const { rows, totaux } = await lignesRapportJournalier(date, vendeurId);
+  const { rows, totaux } = await lignesRapportJournalier(date, vendeurId, req.societeId!);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Rapport journalier");

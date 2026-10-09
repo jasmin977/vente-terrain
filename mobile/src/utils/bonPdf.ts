@@ -3,7 +3,7 @@ import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import type { Article } from "../types/article";
 import type { Facture } from "../types/facture";
-import { SOCIETE } from "./societe";
+import { societeImprimee } from "./societe";
 import PdfPrinter from "../plugins/pdfPrinter";
 
 export type TypeBon = "ENTREE" | "SORTIE" | "RETOUR";
@@ -38,6 +38,7 @@ async function nouveauDocumentA4() {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const marge = 14;
   const largeur = doc.internal.pageSize.getWidth();
+  const SOCIETE = societeImprimee();
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.text(SOCIETE.nom, marge, 18);
@@ -45,6 +46,11 @@ async function nouveauDocumentA4() {
   doc.text(SOCIETE.activite, marge, 24.5);
   doc.setFontSize(9);
   doc.text(`MF: ${SOCIETE.matriculeFiscal}`, marge, 30);
+  // Adresse et téléphone à droite, sous l'en-tête.
+  doc.setFont("helvetica", "normal");
+  const coordonnees = [SOCIETE.adresse, SOCIETE.telephone && `Tél. : ${SOCIETE.telephone}`].filter(Boolean) as string[];
+  coordonnees.forEach((ligne, i) => doc.text(ligne, largeur - marge, 18 + i * 5, { align: "right" }));
+  doc.setFont("helvetica", "bold");
   return { doc, autoTable, marge, largeur };
 }
 

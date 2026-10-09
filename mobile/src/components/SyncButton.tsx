@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { IonAlert, IonIcon, IonSpinner, useIonToast } from "@ionic/react";
-import { cloudDoneOutline, cloudOfflineOutline, cloudUploadOutline, syncOutline } from "ionicons/icons";
-import { synchroniser, useEtatSync } from "../offline/sync";
+import { cloudDoneOutline, cloudDownloadOutline, cloudOfflineOutline, cloudUploadOutline, syncOutline } from "ionicons/icons";
+import { lireMajCatalogue, mettreAJourCatalogue, synchroniser, useEtatSync } from "../offline/sync";
+import { nbImagesEnregistrees, useImagesHorsLigne } from "../offline/images";
 import { retirer, type ActionEnAttente } from "../offline/file";
 import { lireCache } from "../offline/cache";
 import type { Client } from "../types/client";
@@ -42,10 +43,36 @@ export default function SyncButton() {
   const [clients, setClients] = useState<Client[]>([]);
   const [aRetirer, setARetirer] = useState<ActionEnAttente | null>(null);
   const [toast] = useIonToast();
+  const [majCatalogue, setMajCatalogue] = useState<string | null>(null);
+  const [progression, setProgression] = useState<string | null>(null);
+  useImagesHorsLigne();
 
   useEffect(() => {
-    if (open) lireCache("clients").then(setClients);
+    if (!open) return;
+    lireCache("clients").then(setClients);
+    lireMajCatalogue().then(setMajCatalogue);
   }, [open]);
+
+  const catalogueDuJour = majCatalogue !== null && new Date(majCatalogue).toDateString() === new Date().toDateString();
+
+  // Le matin, avec réseau : données à jour + photos enregistrées pour la journée.
+  const mettreAJour = async () => {
+    setProgression(t("Synchronisation…"));
+    try {
+      const { sync, images } = await mettreAJourCatalogue((fait, total) =>
+        setProgression(t("Photos {fait} / {total}…", { fait, total }))
+      );
+      lireMajCatalogue().then(setMajCatalogue);
+      const message = sync.injoignable
+        ? t("Serveur injoignable : connectez-vous à Internet puis réessayez.")
+        : images && images.echecs > 0
+          ? t("Catalogue mis à jour, {n} photo(s) non téléchargée(s).", { n: images.echecs })
+          : t("Catalogue à jour pour la journée.");
+      toast({ message, duration: 2600, position: "top", cssClass: "rc-toast" });
+    } finally {
+      setProgression(null);
+    }
+  };
 
   const nb = file.length;
   const refusees = file.filter((a) => a.erreur).length;
@@ -108,6 +135,42 @@ export default function SyncButton() {
             <Button size="lg" block icon={syncOutline} loading={enCours} onClick={lancer}>
               {t("Synchroniser maintenant")}
             </Button>
+          </div>
+        </Section>
+
+        <Section label={t("Catalogue du jour")}>
+          <div className="rc-fields">
+            <Group>
+              <Row
+                compact
+                label={t("Dernière mise à jour")}
+                trailing={
+                  majCatalogue ? (
+                    <Tag tone={catalogueDuJour ? "positive" : "warning"} dot>
+                      {formatDateTime(majCatalogue)}
+                    </Tag>
+                  ) : (
+                    <Tag tone="warning" dot>
+                      {t("Jamais")}
+                    </Tag>
+                  )
+                }
+              />
+              <Row compact label={t("Photos sur le téléphone")} trailing={<span className="rc-row__value rc-num">{nbImagesEnregistrees()}</span>} />
+            </Group>
+            <Button
+              variant={catalogueDuJour ? "secondary" : "primary"}
+              size="lg"
+              block
+              icon={cloudDownloadOutline}
+              disabled={progression !== null || horsLigne}
+              onClick={mettreAJour}
+            >
+              {progression ?? t("Mettre à jour le catalogue")}
+            </Button>
+            <p className="rc-footnote">
+              {t("Chaque matin avec réseau, avant la tournée : articles, prix, clients, crédits et photos sont gardés sur le téléphone pour la journée.")}
+            </p>
           </div>
         </Section>
 

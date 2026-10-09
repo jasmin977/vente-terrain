@@ -1,14 +1,14 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
-import { situationClient, situationsClients } from "../services/creditService";
+import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
+import { situationClient, situationsSociete } from "../services/creditService";
 
 // Crédits clients : factures à crédit impayées regroupées par client, paiement
 // d'une facture, avance sur le compte d'un client, annulation d'un paiement.
 // Accessible aux vendeurs (ils encaissent sur le terrain) et à l'admin.
 export const creditsRouter = Router();
-creditsRouter.use(requireAuth);
+creditsRouter.use(requireAuth, requireSociete);
 
 const EPS = 0.0005;
 const arrondi = (n: number) => Math.round(n * 1000) / 1000;
@@ -32,12 +32,12 @@ const modeSchema = z.enum(["ESPECES", "CHEQUE", "VIREMENT", "TPE"]);
 const premiereErreur = (err: z.ZodError) => err.issues[0]?.message ?? "Données invalides";
 
 // Liste des clients ayant une dette, avec leurs factures impayées.
-creditsRouter.get("/", async (_req, res) => {
+creditsRouter.get("/", async (req, res) => {
   try {
-    const situations = await situationsClients();
+    const situations = await situationsSociete(req.societeId!);
     const ids = [...situations.entries()].filter(([, s]) => s.totalDu > EPS).map(([id]) => id);
     const clients = await prisma.client.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, societeId: req.societeId },
       select: { id: true, code: true, nomCommerce: true, ville: true, telephone: true },
     });
     const result = clients
@@ -52,8 +52,8 @@ creditsRouter.get("/", async (_req, res) => {
 // Situation détaillée d'un client + ses derniers encaissements sur crédit.
 creditsRouter.get("/clients/:id", async (req, res) => {
   try {
-    const client = await prisma.client.findUnique({
-      where: { id: req.params.id },
+    const client = await prisma.client.findFirst({
+      where: { id: req.params.id, societeId: req.societeId },
       select: { id: true, code: true, nomCommerce: true, ville: true, telephone: true },
     });
     if (!client) return res.status(404).json({ error: "Client introuvable" });
@@ -96,7 +96,7 @@ creditsRouter.post("/factures/:id/payer", async (req, res) => {
       if (existant) return res.status(200).json(existant);
     }
     const paiement = await prisma.$transaction(async (tx) => {
-      const facture = await tx.facture.findUnique({ where: { id: req.params.id } });
+      const facture = await tx.facture.findFirst({ where: { id: req.params.id, client: { societeId: req.societeId } } });
       if (!facture || facture.deletedAt) throw new Refus("Bon de livraison introuvable");
       if (facture.typeVente !== "CREDIT") throw new Refus("Ce bon de livraison n'est pas une vente à crédit");
       if (facture.statut !== "VALIDEE") throw new Refus("Ce bon de livraison est annulé");
@@ -144,6 +144,8 @@ creditsRouter.post("/avance", async (req, res) => {
       if (existant) return res.status(200).json(existant);
     }
     const paiement = await prisma.$transaction(async (tx) => {
+      const client = await tx.client.findFirst({ where: { id: data.clientId, societeId: req.societeId }, select: { id: true } });
+      if (!client) throw new Refus("Client introuvable");
       const situation = await situationClient(data.clientId, tx);
       const montant = arrondi(data.montant);
       if (situation.totalDu <= EPS) throw new Refus("Ce client n'a aucun crédit en cours");
@@ -172,7 +174,10 @@ creditsRouter.post("/avance", async (req, res) => {
 // Annulation d'un encaissement saisi par erreur (admin) : la dette revient.
 creditsRouter.delete("/paiements/:id", requireAdmin, async (req, res) => {
   try {
-    const p = await prisma.paiement.findUnique({ where: { id: req.params.id }, include: { facture: true } });
+    const p = await prisma.paiement.findFirst({
+      where: { id: req.params.id, client: { societeId: req.societeId } },
+      include: { facture: true },
+    });
     if (!p || p.deletedAt) return res.status(404).json({ error: "Paiement introuvable" });
     if (p.facture?.typeVente === "COMPTANT") {
       return res.status(409).json({ error: "Ce règlement appartient à une vente comptant : annulez le bon de livraison." });

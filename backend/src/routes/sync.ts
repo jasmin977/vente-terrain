@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSociete } from "../middleware/auth";
 import { creerFacture } from "../services/factureService";
 
 export const syncRouter = Router();
-syncRouter.use(requireAuth);
+syncRouter.use(requireAuth, requireSociete);
 
 // --- PULL : le mobile envoie la date de sa dernière synchro réussie et reçoit
 // tout ce qui a changé depuis (créations, modifications, suppressions logiques
@@ -18,8 +18,8 @@ syncRouter.get("/pull", async (req, res) => {
   const serverTime = new Date();
 
   const [articles, clients, factures, retours, paiements, stockCamion, visites] = await Promise.all([
-    prisma.article.findMany({ where: { updatedAt: { gt: since } } }),
-    prisma.client.findMany({ where: { updatedAt: { gt: since } } }),
+    prisma.article.findMany({ where: { updatedAt: { gt: since }, societeId: req.societeId } }),
+    prisma.client.findMany({ where: { updatedAt: { gt: since }, societeId: req.societeId } }),
     prisma.facture.findMany({
       where: { updatedAt: { gt: since }, vendeurId },
       include: { lignes: true },
@@ -135,7 +135,10 @@ syncRouter.post("/push", async (req, res) => {
 
   for (const c of data.clients) {
     try {
-      await prisma.client.upsert({ where: { id: c.id }, create: c, update: c });
+      // Un client d'une autre société n'est jamais modifié.
+      const autre = await prisma.client.findFirst({ where: { id: c.id, NOT: { societeId: req.societeId } }, select: { id: true } });
+      if (autre) throw new Error("Client introuvable");
+      await prisma.client.upsert({ where: { id: c.id }, create: { ...c, societeId: req.societeId! }, update: c });
       resultats.clients.push({ id: c.id, ok: true });
     } catch (err) {
       resultats.clients.push({ id: c.id, ok: false, error: (err as Error).message });
@@ -144,7 +147,7 @@ syncRouter.post("/push", async (req, res) => {
 
   for (const f of data.factures) {
     try {
-      await creerFacture(vendeurId, f);
+      await creerFacture(vendeurId, f, req.societeId!);
       resultats.factures.push({ id: f.id, ok: true });
     } catch (err) {
       resultats.factures.push({ id: f.id, ok: false, error: (err as Error).message });
@@ -153,6 +156,8 @@ syncRouter.post("/push", async (req, res) => {
 
   for (const p of data.paiements) {
     try {
+      const client = await prisma.client.findFirst({ where: { id: p.clientId, societeId: req.societeId }, select: { id: true } });
+      if (!client) throw new Error("Client introuvable");
       const existing = await prisma.paiement.findUnique({ where: { id: p.id } });
       if (!existing) {
         await prisma.paiement.create({ data: { ...p, vendeurId, date: p.date ?? new Date() } });
@@ -168,7 +173,8 @@ syncRouter.post("/push", async (req, res) => {
       const existing = await prisma.retour.findUnique({ where: { id: r.id } });
       if (!existing) {
         await prisma.$transaction(async (tx) => {
-          const client = await tx.client.findUnique({ where: { id: r.clientId }, select: { nomCommerce: true } });
+          const client = await tx.client.findFirst({ where: { id: r.clientId, societeId: req.societeId }, select: { nomCommerce: true } });
+          if (!client) throw new Error("Client introuvable");
           for (const l of r.lignes) {
             await tx.stockCamion.upsert({
               where: { vendeurId_articleId: { vendeurId, articleId: l.articleId } },

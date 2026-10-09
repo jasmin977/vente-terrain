@@ -38,12 +38,12 @@ export default function Login() {
           <div className="rc-login__brand">
             <img
               className="rc-brandmark"
-              src="/brand-mark.png"
+              src="/brand-mark.svg"
               alt=""
               width={72}
               height={72}
             />
-            <h1 className="rc-login__title">{t("Revive Cosmetix")}</h1>
+            <h1 className="rc-login__title">{t("Vente Terrain")}</h1>
             <p className="rc-login__subtitle">{t("Connectez-vous pour continuer")}</p>
           </div>
 

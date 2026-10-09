@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { plageDates } from "../utils/plage";
 
 export const stockRouter = Router();
 // Tout le module stock est réservé à l'admin : le vendeur ne doit pas connaître
 // le stock théorique de son camion (contrôle par inventaire).
-stockRouter.use(requireAuth, requireAdmin);
+stockRouter.use(requireAuth, requireAdmin, requireSociete, ciblesDeLaSociete);
 
 // Une quantité peut être saisie en colis (convertie via le colisage de
 // l'article) ou directement en unités.
@@ -119,6 +119,8 @@ stockRouter.get("/mouvements/articles", async (req, res) => {
 stockRouter.get("/mouvements/par-article/:articleId", async (req, res) => {
   const { articleId } = req.params;
   try {
+    const article = await prisma.article.findFirst({ where: { id: articleId, societeId: req.societeId }, select: { id: true } });
+    if (!article) return res.status(404).json({ error: "Article introuvable" });
     const [groupes, stocks] = await Promise.all([
       prisma.mouvementStock.groupBy({
         by: ["vendeurId", "sens"],
@@ -166,9 +168,9 @@ stockRouter.get("/numero-suivant", async (req, res) => {
     const where = { reference: { startsWith: prefixe } };
     const references =
       type === "ENTREE"
-        ? await prisma.entreeDepot.findMany({ where, select: { reference: true } })
+        ? await prisma.entreeDepot.findMany({ where: { ...where, societeId: req.societeId }, select: { reference: true } })
         : await prisma.chargementCamion.findMany({
-            where: { ...where, sens: type === "SORTIE" ? "CHARGEMENT" : "RETOUR" },
+            where: { ...where, sens: type === "SORTIE" ? "CHARGEMENT" : "RETOUR", vendeur: { societeId: req.societeId } },
             select: { reference: true },
           });
     const max = references.reduce((m, r) => {
@@ -184,9 +186,9 @@ stockRouter.get("/numero-suivant", async (req, res) => {
 // ---------------------------------------------------------------- Dépôt
 
 // Tous les articles actifs avec leur quantité au dépôt (0 si jamais reçue).
-stockRouter.get("/depot", async (_req, res) => {
+stockRouter.get("/depot", async (req, res) => {
   const articles = await prisma.article.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, societeId: req.societeId },
     include: { stockDepot: true },
     orderBy: { designation: "asc" },
   });
@@ -199,8 +201,9 @@ stockRouter.get("/depot", async (_req, res) => {
   );
 });
 
-stockRouter.get("/depot/mouvements", async (_req, res) => {
+stockRouter.get("/depot/mouvements", async (req, res) => {
   const mouvements = await prisma.mouvementDepot.findMany({
+    where: { article: { societeId: req.societeId } },
     include: { article: true, vendeur: { select: { id: true, nom: true, code: true } } },
     orderBy: { date: "desc" },
     take: 200,
@@ -222,7 +225,9 @@ stockRouter.post("/depot/entree", async (req, res) => {
   try {
     // Le document EntreeDepot regroupe la réception pour l'historique (et sa suppression).
     const entree = await prisma.$transaction(async (tx) => {
-      const doc = await tx.entreeDepot.create({ data: { reference: data.reference, adminId: req.user!.id } });
+      const doc = await tx.entreeDepot.create({
+        data: { reference: data.reference, adminId: req.user!.id, societeId: req.societeId! },
+      });
       for (const l of data.lignes) {
         const article = await tx.article.findUniqueOrThrow({ where: { id: l.articleId } });
         const unites = enUnites(l.quantite, l.unite, article.colisage);

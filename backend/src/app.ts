@@ -17,6 +17,7 @@ import { rapportsRouter } from "./routes/rapports";
 import { tableauDeBordRouter } from "./routes/tableauDeBord";
 import { syncRouter } from "./routes/sync";
 import { uploadsRouter, UPLOADS_DIR } from "./routes/uploads";
+import { societesRouter } from "./routes/societes";
 
 export const app = express();
 
@@ -44,6 +45,7 @@ app.use("/api/rapports", rapportsRouter);
 app.use("/api/tableau-de-bord", tableauDeBordRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/uploads", uploadsRouter);
+app.use("/api/societes", societesRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

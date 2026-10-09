@@ -6,6 +6,8 @@ export interface AuthUser {
   id: string;
   code: string;
   role: "ADMIN" | "VENDEUR";
+  /** Société du vendeur ; null pour l'admin (qui choisit la société à chaque requête). */
+  societeId: string | null;
 }
 
 interface JetonPayload extends AuthUser {
@@ -18,6 +20,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthUser;
+      /** Société concernée par la requête (voir requireSociete). */
+      societeId?: string;
     }
   }
 }
@@ -65,12 +69,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const compte = await prisma.user.findUnique({
       where: { id: payload.id },
-      select: { id: true, code: true, role: true, actif: true, sessionVersion: true },
+      select: { id: true, code: true, role: true, actif: true, sessionVersion: true, societeId: true },
     });
     if (!compte || !compte.actif || compte.sessionVersion !== (payload.sv ?? 0)) {
       return res.status(401).json({ error: "Session expirée, reconnectez-vous" });
     }
-    req.user = { id: compte.id, code: compte.code, role: compte.role };
+    req.user = { id: compte.id, code: compte.code, role: compte.role, societeId: compte.societeId };
     if (compte.role === "VENDEUR") masquerChampsAdmin(res);
     next();
   } catch (err) {
@@ -84,4 +88,58 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return res.status(403).json({ error: "Accès réservé à l'administrateur" });
   }
   next();
+}
+
+/**
+ * Toute requête qui vise un vendeur (camion) ou des articles ne peut viser que
+ * ceux de la société courante : sinon « introuvable », comme s'ils n'existaient pas.
+ */
+export async function ciblesDeLaSociete(req: Request, res: Response, next: NextFunction) {
+  try {
+    const vendeurId = (req.query.vendeurId as string | undefined) || (req.body?.vendeurId as string | undefined);
+    if (vendeurId) {
+      const v = await prisma.user.findFirst({ where: { id: vendeurId, societeId: req.societeId }, select: { id: true } });
+      if (!v) return res.status(404).json({ error: "Vendeur introuvable" });
+    }
+    const ids = new Set<string>();
+    if (typeof req.query.articleId === "string" && req.query.articleId) ids.add(req.query.articleId);
+    if (typeof req.params.articleId === "string") ids.add(req.params.articleId);
+    if (Array.isArray(req.body?.lignes)) {
+      for (const l of req.body.lignes) if (typeof l?.articleId === "string") ids.add(l.articleId);
+    }
+    if (ids.size) {
+      const n = await prisma.article.count({ where: { id: { in: [...ids] }, societeId: req.societeId } });
+      if (n !== ids.size) return res.status(404).json({ error: "Article introuvable" });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+}
+
+/**
+ * Société de la requête (après requireAuth) :
+ * - vendeur : toujours la sienne (impossible d'en viser une autre) ;
+ * - admin : celle choisie dans l'app, en-tête « X-Societe-Id ».
+ * Toutes les données (articles, clients, stock, bons…) sont filtrées dessus.
+ */
+export async function requireSociete(req: Request, res: Response, next: NextFunction) {
+  const user = req.user!;
+  if (user.role === "VENDEUR") {
+    if (!user.societeId) return res.status(403).json({ error: "Ce compte vendeur n'est rattaché à aucune société" });
+    req.societeId = user.societeId;
+    return next();
+  }
+  const id = req.header("x-societe-id");
+  if (!id) return res.status(400).json({ error: "Choisissez une société" });
+  try {
+    const societe = await prisma.societe.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!societe) return res.status(404).json({ error: "Société introuvable" });
+    req.societeId = societe.id;
+    next();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
 }

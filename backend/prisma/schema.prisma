@@ -4,14 +4,14 @@
 // incrémentale (delta sync) fiable entre le backend et la base locale SQLite du mobile.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // rhel-openssl-3.0.x : moteur des fonctions Vercel.
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   // Connexion directe (sans pooler) pour les migrations ; avec Neon sur Vercel,
   // l'intégration fournit DATABASE_URL (poolée) et DATABASE_URL_UNPOOLED.
   directUrl = env("DATABASE_URL_UNPOOLED")
@@ -71,23 +71,51 @@ enum MotifEcart {
   AUTRE
 }
 
+// Société (entreprise) gérée par l'admin : chacune a ses propres articles,
+// clients, dépôt, vendeurs (et donc camions) et bons. L'admin passe de l'une à
+// l'autre ; un vendeur appartient à une seule société.
+model Societe {
+  id              String    @id @default(uuid())
+  // Préfixe des comptes vendeurs (RC → RC-V001) : codes uniques dans toute l'app.
+  code            String    @unique
+  nom             String
+  activite        String?
+  matriculeFiscal String?
+  adresse         String?
+  telephone       String?
+  logo            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  articles Article[]
+  clients  Client[]
+  users    User[]
+  entrees  EntreeDepot[]
+
+  @@map("societes")
+}
+
 model User {
-  id             String   @id @default(uuid())
-  code           String   @unique
-  nom            String
-  email          String?  @unique
-  telephone      String?
+  id               String   @id @default(uuid())
+  code             String   @unique
+  nom              String
+  email            String?  @unique
+  telephone        String?
+  // Société du vendeur ; l'admin (null) gère toutes les sociétés.
+  societeId        String?
+  societe          Societe? @relation(fields: [societeId], references: [id])
   // Véhicule du vendeur, imprimé sur ses bons de sortie.
   voiture          String?
   matriculeVoiture String?
-  passwordHash   String
-  role           Role     @default(VENDEUR)
-  actif          Boolean  @default(true)
+  passwordHash     String
+  role             Role     @default(VENDEUR)
+  actif            Boolean  @default(true)
   // Incrémenté à la désactivation du compte ou au changement de mot de passe :
   // les jetons émis avant deviennent invalides (déconnexion immédiate).
-  sessionVersion Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  sessionVersion   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   stockCamion      StockCamion[]
   chargements      ChargementCamion[]
@@ -105,7 +133,10 @@ model User {
 
 model Article {
   id          String    @id @default(uuid())
-  code        String    @unique
+  societeId   String
+  societe     Societe   @relation(fields: [societeId], references: [id])
+  // Unique dans la société (deux sociétés peuvent avoir le même code).
+  code        String
   codeBarre   String?
   designation String
   marque      String?
@@ -129,30 +160,35 @@ model Article {
   lignesChargement LigneChargement[]
   mouvementsStock  MouvementStock[]
 
+  @@unique([societeId, code])
   @@index([updatedAt])
   @@map("articles")
 }
 
 model Client {
-  id            String    @id @default(uuid())
-  code          String    @unique
-  nomCommerce   String
-  responsable   String?
-  telephone     String?
-  adresse       String?
-  ville         String?
-  latitude      Float?
-  longitude     Float?
-  actif         Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  id          String    @id @default(uuid())
+  societeId   String
+  societe     Societe   @relation(fields: [societeId], references: [id])
+  // Matricule fiscal, unique dans la société.
+  code        String
+  nomCommerce String
+  responsable String?
+  telephone   String?
+  adresse     String?
+  ville       String?
+  latitude    Float?
+  longitude   Float?
+  actif       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   factures  Facture[]
   retours   Retour[]
   paiements Paiement[]
   visites   Visite[]
 
+  @@unique([societeId, code])
   @@index([updatedAt])
   @@map("clients")
 }
@@ -224,6 +260,8 @@ model MouvementDepot {
 // stock dépôt est alors diminué d'autant.
 model EntreeDepot {
   id         String             @id @default(uuid())
+  societeId  String
+  societe    Societe            @relation(fields: [societeId], references: [id])
   reference  String?
   date       DateTime           @default(now())
   adminId    String?
@@ -234,6 +272,7 @@ model EntreeDepot {
   mouvements MouvementDepot[]
 
   @@index([date])
+  @@index([societeId])
   @@map("entrees_depot")
 }
 

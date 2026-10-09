@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../middleware/auth";
+import { ciblesDeLaSociete, requireAuth, requireSociete } from "../middleware/auth";
 
 export const retoursRouter = Router();
-retoursRouter.use(requireAuth);
+retoursRouter.use(requireAuth, requireSociete, ciblesDeLaSociete);
 
 const ligneSchema = z.object({
   articleId: z.string().uuid(),
@@ -25,9 +25,10 @@ retoursRouter.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data = parsed.data;
   const vendeurId = req.user!.id;
+  const client = await prisma.client.findFirst({ where: { id: data.clientId, societeId: req.societeId }, select: { nomCommerce: true } });
+  if (!client) return res.status(404).json({ error: "Client introuvable" });
 
   const retour = await prisma.$transaction(async (tx) => {
-    const client = await tx.client.findUnique({ where: { id: data.clientId }, select: { nomCommerce: true } });
     for (const l of data.lignes) {
       await tx.stockCamion.upsert({
         where: { vendeurId_articleId: { vendeurId, articleId: l.articleId } },
@@ -56,7 +57,7 @@ retoursRouter.post("/", async (req, res) => {
 retoursRouter.get("/", async (req, res) => {
   const { clientId } = req.query as Record<string, string | undefined>;
   const retours = await prisma.retour.findMany({
-    where: { deletedAt: null, ...(clientId ? { clientId } : {}) },
+    where: { deletedAt: null, client: { societeId: req.societeId }, ...(clientId ? { clientId } : {}) },
     include: { lignes: { include: { article: true } } },
     orderBy: { date: "desc" },
   });

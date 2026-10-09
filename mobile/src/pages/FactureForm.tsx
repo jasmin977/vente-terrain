@@ -186,7 +186,7 @@ export default function FactureForm() {
 
   return (
     <IonPage>
-      <AppHeader backHref="/factures" title={t("Nouveau bon de livraison")} />
+      <AppHeader backHref="/factures" title={t("Nouveau B° Livraison")} />
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}

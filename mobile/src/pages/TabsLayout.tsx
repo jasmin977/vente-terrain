@@ -74,13 +74,13 @@ export default function TabsLayout() {
   const tabs = isAdmin
     ? [
         { tab: "tableau-de-bord", href: "/tableau-de-bord", label: t("Accueil"), icon: statsChartOutline, iconOn: statsChart },
-        { tab: "factures", href: "/factures", label: t("Livraisons"), icon: documentTextOutline, iconOn: documentText },
+        { tab: "factures", href: "/factures", label: t("B° Livraison"), icon: documentTextOutline, iconOn: documentText },
         { tab: "clients", href: "/clients", label: t("Clients"), icon: peopleOutline, iconOn: people },
         { tab: "stock", href: "/stock", label: t("Stock"), icon: carOutline, iconOn: car },
         { tab: "inventaires", href: "/inventaires", label: t("Inventaires"), icon: clipboardOutline, iconOn: clipboard },
       ]
     : [
-        { tab: "factures", href: "/factures", label: t("Livraisons"), icon: documentTextOutline, iconOn: documentText },
+        { tab: "factures", href: "/factures", label: t("B° Livraison"), icon: documentTextOutline, iconOn: documentText },
         { tab: "articles", href: "/articles", label: t("Articles"), icon: cubeOutline, iconOn: cube },
         { tab: "clients", href: "/clients", label: t("Clients"), icon: peopleOutline, iconOn: people },
       ];

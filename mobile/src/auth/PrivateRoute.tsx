@@ -13,7 +13,7 @@ export default function PrivateRoute({ children }: { children: ReactNode }) {
       <IonPage>
         <IonContent>
           <div className="rc-splash">
-            <img className="rc-brandmark" src="/brand-mark.png" alt="Revive Cosmetix" />
+            <img className="rc-brandmark" src="/brand-mark.svg" alt="Vente Terrain" />
             <Spinner label={t("Ouverture de la session")} />
           </div>
         </IonContent>

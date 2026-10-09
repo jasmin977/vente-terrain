@@ -1,7 +1,36 @@
+import { createHash } from "crypto";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import path from "path";
 import bcrypt from "bcryptjs";
+import { put } from "@vercel/blob";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+// Photos des articles : prisma/images/<code>.<ext>. Le seed les envoie au
+// stockage du serveur et l'article garde l'adresse obtenue :
+// - production (BLOB_READ_WRITE_TOKEN défini) : Vercel Blob, adresse https ;
+// - développement : backend/uploads/articles, servi par l'API sous /uploads.
+// Le nom contient une empreinte du contenu : une photo remplacée change
+// d'adresse, et les téléphones qui l'ont gardée hors ligne la retéléchargent.
+const DOSSIER_IMAGES = path.join(__dirname, "images");
+const DOSSIER_UPLOADS = path.join(__dirname, "..", "uploads", "articles");
+const TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+
+async function stockerImage(code: string): Promise<string | null> {
+  const ext = Object.keys(TYPES).find((e) => existsSync(path.join(DOSSIER_IMAGES, `${code}.${e}`)));
+  if (!ext) return null; // l'app affiche l'image par défaut
+  const source = path.join(DOSSIER_IMAGES, `${code}.${ext}`);
+  const contenu = readFileSync(source);
+  const nom = `${code}-${createHash("sha1").update(contenu).digest("hex").slice(0, 8)}.${ext}`;
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await put(`articles/${nom}`, contenu, { access: "public", contentType: TYPES[ext], allowOverwrite: true });
+    return blob.url;
+  }
+  mkdirSync(DOSSIER_UPLOADS, { recursive: true });
+  copyFileSync(source, path.join(DOSSIER_UPLOADS, nom));
+  return `/uploads/articles/${nom}`;
+}
 
 async function main() {
   // En production : SEED_ADMIN_PASSWORD / SEED_VENDEUR_PASSWORD (les valeurs
@@ -20,6 +49,19 @@ async function main() {
     update: {},
   });
 
+  // Première société (même identifiant que la migration qui l'a créée).
+  const societe = await prisma.societe.upsert({
+    where: { code: "RC" },
+    create: {
+      id: "00000000-0000-4000-8000-000000000001",
+      code: "RC",
+      nom: "BONNE AFFAIRE REVIVE COSMETIX",
+      activite: "Fabrication de parfums et de cosmétiques",
+      matriculeFiscal: "1896028Y/A/M/000",
+    },
+    update: {},
+  });
+
   const vendeurPassword = await bcrypt.hash(motDePasseVendeur, 10);
   await prisma.user.upsert({
     where: { code: "V001" },
@@ -28,11 +70,13 @@ async function main() {
       nom: "Ahmed Ben Salah",
       role: "VENDEUR",
       passwordHash: vendeurPassword,
+      societeId: societe.id,
     },
     update: {},
   });
 
-  // Catalogue (ordre de la liste de prix). Sans photo : image par défaut.
+  // Catalogue (ordre de la liste de prix). Photo : prisma/images/<code>.<ext>
+  // (voir stockerImage) ; sans photo, l'app affiche l'image par défaut.
   // prixAchat 0 = prix d'achat non renseigné (exclu du calcul de marge) ;
   // codeBarre null = pas encore de code-barres.
   const produitsCire = [
@@ -42,7 +86,6 @@ async function main() {
       designation: "GEL CIRE",
       marque: "MR JOCKER",
       unit: "160 ML",
-      img: "/articles/010001.png",
       colisage: 6,
       prixVente: 5,
       prixAchat: 2.5,
@@ -53,7 +96,6 @@ async function main() {
       designation: "GEL CIRE CREME",
       marque: "MR JOCKER",
       unit: "160 ML",
-      img: "/articles/010002.png",
       colisage: 6,
       prixVente: 5,
       prixAchat: 2.5,
@@ -64,7 +106,6 @@ async function main() {
       designation: "GEL CIRE GUMMY",
       marque: "MR JOCKER",
       unit: "160 ML",
-      img: "/articles/010003.png",
       colisage: 6,
       prixVente: 5,
       prixAchat: 2.5,
@@ -75,7 +116,6 @@ async function main() {
       designation: "GEL CIRE POMMADE CREME",
       marque: "MR JOCKER",
       unit: "160 ML",
-      img: "/articles/010004.png",
       colisage: 6,
       prixVente: 5,
       prixAchat: 2.5,
@@ -86,7 +126,6 @@ async function main() {
       designation: "CIRE-WAX ORANGE",
       marque: "MR JOCKER",
       unit: "100 ML",
-      img: "/articles/010005.png",
       colisage: 6,
       prixVente: 5.5,
       prixAchat: 2.7,
@@ -97,7 +136,6 @@ async function main() {
       designation: "CIRE-WAX VERT",
       marque: "MR JOCKER",
       unit: "100 ML",
-      img: "/articles/010006.png",
       colisage: 6,
       prixVente: 5.5,
       prixAchat: 2.7,
@@ -108,7 +146,6 @@ async function main() {
       designation: "CIRE CREME WAX",
       marque: "MR JOCKER",
       unit: "100 ML",
-      img: "/articles/010007.png",
       colisage: 6,
       prixVente: 5.5,
       prixAchat: 2.7,
@@ -119,7 +156,6 @@ async function main() {
       designation: "CIRE POMMADE WAX",
       marque: "MR JOCKER",
       unit: "100 ML",
-      img: "/articles/010008.png",
       colisage: 6,
       prixVente: 5.5,
       prixAchat: 2.7,
@@ -130,10 +166,9 @@ async function main() {
       designation: "SERUM FIXATION MOYENNE",
       marque: "MR JOCKER",
       unit: "30 ML",
-      img: "/articles/010009.jpg",
       colisage: 5,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "010010",
@@ -141,10 +176,9 @@ async function main() {
       designation: "SERUM FORTE FIXATION",
       marque: "MR JOCKER",
       unit: "30 ML",
-      img: "/articles/010010.jpg",
       colisage: 5,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "010011",
@@ -152,10 +186,9 @@ async function main() {
       designation: "PRESENTOIRE GEL CIRE CREME",
       marque: "MR JOCKER",
       unit: "12 ML",
-      img: "/articles/default.svg",
       colisage: 1,
       prixVente: 15,
-      prixAchat: 0,
+      prixAchat: 10,
     },
     {
       code: "010012",
@@ -163,10 +196,9 @@ async function main() {
       designation: "PRESENTOIRE GEL CIRE GUMMY",
       marque: "MR JOCKER",
       unit: "12 ML",
-      img: "/articles/default.svg",
       colisage: 1,
       prixVente: 15,
-      prixAchat: 0,
+      prixAchat: 10,
     },
     {
       code: "020001",
@@ -174,7 +206,6 @@ async function main() {
       designation: "CIRE WAX FLEXIBLE",
       marque: "VEVO",
       unit: "60 ML",
-      img: "/articles/020001.png",
       colisage: 6,
       prixVente: 4,
       prixAchat: 2.0,
@@ -185,7 +216,6 @@ async function main() {
       designation: "CIRE CREME FLEXIBLE",
       marque: "VEVO",
       unit: "60 ML",
-      img: "/articles/020002.png",
       colisage: 6,
       prixVente: 4,
       prixAchat: 2.0,
@@ -196,10 +226,9 @@ async function main() {
       designation: "ROLL'ON ROUGE",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020003.jpg",
       colisage: 6,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "020004",
@@ -207,10 +236,9 @@ async function main() {
       designation: "ROLL'ON ROSE",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020004.jpg",
       colisage: 6,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "020005",
@@ -218,10 +246,9 @@ async function main() {
       designation: "ROLL'ON VERT",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020005.jpg",
       colisage: 6,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "020006",
@@ -229,10 +256,9 @@ async function main() {
       designation: "ROLL'ON BLEU",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020006.jpg",
       colisage: 6,
       prixVente: 5,
-      prixAchat: 0,
+      prixAchat: 1.5,
     },
     {
       code: "020007",
@@ -240,10 +266,9 @@ async function main() {
       designation: "SERUM VANILLE",
       marque: "VEVO",
       unit: "100 ML",
-      img: "/articles/020007.jpg",
       colisage: 6,
       prixVente: 8,
-      prixAchat: 0,
+      prixAchat: 5,
     },
     {
       code: "020008",
@@ -251,10 +276,9 @@ async function main() {
       designation: "SERUM NOIX DE COCO",
       marque: "VEVO",
       unit: "100 ML",
-      img: "/articles/020008.jpg",
       colisage: 6,
       prixVente: 8,
-      prixAchat: 0,
+      prixAchat: 5,
     },
     {
       code: "020009",
@@ -262,10 +286,9 @@ async function main() {
       designation: "SERUM VANILLE",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020009.jpg",
       colisage: 9,
       prixVente: 5.5,
-      prixAchat: 0,
+      prixAchat: 4,
     },
     {
       code: "020010",
@@ -273,10 +296,9 @@ async function main() {
       designation: "SERUM NOIX DE COCO",
       marque: "VEVO",
       unit: "50 ML",
-      img: "/articles/020010.jpg",
       colisage: 9,
       prixVente: 5.5,
-      prixAchat: 0,
+      prixAchat: 3,
     },
     {
       code: "020011",
@@ -284,7 +306,6 @@ async function main() {
       designation: "CIRE WAX STRONG",
       marque: "VEVO",
       unit: "60 ML",
-      img: "/articles/020011.png",
       colisage: 6,
       prixVente: 4,
       prixAchat: 2.0,
@@ -295,7 +316,6 @@ async function main() {
       designation: "CIRE CREME POMMADE",
       marque: "VEVO",
       unit: "60 ML",
-      img: "/articles/020012.png",
       colisage: 6,
       prixVente: 4,
       prixAchat: 2.0,
@@ -306,10 +326,9 @@ async function main() {
       designation: "PRESENTOIR 50 DOSES GEL CIRE",
       marque: "VEVO",
       unit: "12 ML",
-      img: "/articles/default.svg",
       colisage: 1,
       prixVente: 15,
-      prixAchat: 0,
+      prixAchat: 9,
     },
     {
       code: "020014",
@@ -317,10 +336,9 @@ async function main() {
       designation: "PRESENTOIR 50 DOSES SHAMPOING CIRE",
       marque: "VEVO",
       unit: "10 ML",
-      img: "/articles/default.svg",
       colisage: 1,
       prixVente: 13,
-      prixAchat: 0,
+      prixAchat: 9,
     },
     {
       code: "020015",
@@ -328,10 +346,9 @@ async function main() {
       designation: "PRESENTOIR 50 DOSES CREME A RASER",
       marque: "VEVO",
       unit: "10 ML",
-      img: "/articles/default.svg",
       colisage: 1,
       prixVente: 15,
-      prixAchat: 0,
+      prixAchat: 11,
     },
     {
       code: "020017",
@@ -339,10 +356,9 @@ async function main() {
       designation: "PRESENTOIRE PERFUM STYLO",
       marque: "VEVO",
       unit: "20 ML",
-      img: "/articles/020017.jpg",
       colisage: 12,
       prixVente: 45,
-      prixAchat: 0,
+      prixAchat: 20,
     },
     {
       code: "020018",
@@ -350,24 +366,26 @@ async function main() {
       designation: "CREME A RASER",
       marque: "VEVO",
       unit: "200 ML",
-      img: "/articles/default.svg",
       colisage: 6,
       prixVente: 27,
-      prixAchat: 0,
+      prixAchat: 18,
     },
   ];
 
   for (const p of produitsCire) {
+    const img = await stockerImage(p.code);
     await prisma.article.upsert({
-      where: { code: p.code },
-      create: { ...p },
-      update: { ...p },
+      where: { societeId_code: { societeId: societe.id, code: p.code } },
+      create: { ...p, img, societeId: societe.id },
+      update: { ...p, img },
     });
   }
+  console.log(`Photos : ${process.env.BLOB_READ_WRITE_TOKEN ? "Vercel Blob" : "backend/uploads/articles"}`);
 
   await prisma.client.upsert({
-    where: { code: "CLI001" },
+    where: { societeId_code: { societeId: societe.id, code: "CLI001" } },
     create: {
+      societeId: societe.id,
       code: "CLI001",
       nomCommerce: "Superette El Manar",
       responsable: "Karim",

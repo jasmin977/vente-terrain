@@ -1,9 +1,19 @@
 import { Preferences } from "@capacitor/preferences";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
+
+/** Adresse du serveur sans /api (ex. https://vente-terrain.vercel.app) : sert les photos /uploads/…. */
+export const SERVEUR_URL = API_URL.replace(/\/api\/?$/, "");
 const TOKEN_KEY = "auth_token";
 
 let cachedToken: string | null | undefined;
+
+// Société courante (admin) : envoyée à chaque requête, le serveur filtre dessus.
+// Pour un vendeur, le serveur utilise toujours sa propre société.
+let societeRequete: string | null = null;
+export function definirSocieteRequete(id: string | null) {
+  societeRequete = id;
+}
 
 export async function getToken(): Promise<string | null> {
   if (cachedToken !== undefined) return cachedToken;
@@ -49,14 +59,35 @@ export function estErreurReseau(err: unknown): boolean {
   return true;
 }
 
+async function entetes(auth = true): Promise<Record<string, string>> {
+  const h: Record<string, string> = {};
+  if (auth) {
+    const token = await getToken();
+    if (token) h.Authorization = `Bearer ${token}`;
+  }
+  if (societeRequete) h["X-Societe-Id"] = societeRequete;
+  return h;
+}
+
+/** Requête authentifiée dont on veut la réponse brute (fichier à télécharger). */
+export async function requeteBrute(path: string): Promise<Response> {
+  const res = await fetch(`${API_URL}${path}`, { headers: await entetes() });
+  if (!res.ok) {
+    let message = `Erreur ${res.status}`;
+    try {
+      message = (await res.json())?.error || message;
+    } catch {
+      // corps non-JSON
+    }
+    throw new ApiError(res.status, message);
+  }
+  return res;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = true, timeoutMs } = options;
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (auth) {
-    const token = await getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(await entetes(auth)) };
 
   const controller = timeoutMs ? new AbortController() : undefined;
   const minuterie = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;

@@ -48,8 +48,9 @@ const ajouter = (pm: ParMode, mode: ModePaiement, m: number) => {
   pm[mode] = arrondi((pm[mode] ?? 0) + m);
 };
 
-async function calculer(db: Client, clientIds?: string[]) {
-  const whereClient = clientIds ? { clientId: { in: clientIds } } : {};
+// Clients visés : une liste précise, ou tous ceux d'une société.
+async function calculer(db: Client, clientIds?: string[], societeId?: string) {
+  const whereClient = clientIds ? { clientId: { in: clientIds } } : societeId ? { client: { societeId } } : {};
   const [factures, paiements] = await Promise.all([
     db.facture.findMany({
       where: { ...whereClient, typeVente: "CREDIT", statut: "VALIDEE", deletedAt: null },
@@ -151,6 +152,11 @@ export async function situationClient(clientId: string, db: Client = prisma): Pr
 
 export async function situationsClients(clientIds?: string[], db: Client = prisma) {
   return (await calculer(db, clientIds)).situations;
+}
+
+/** Situations de crédit de tous les clients d'une société. */
+export async function situationsSociete(societeId: string, db: Client = prisma) {
+  return (await calculer(db, undefined, societeId)).situations;
 }
 
 /** Solde dû par le client (positif = le client doit de l'argent). */

@@ -9,10 +9,12 @@ export function genererMotDePasse(longueur = 8): string {
 }
 
 /** Prochain code vendeur libre au format V001, V002… */
-export function prochainCodeVendeur(codes: string[]): string {
+/** Prochain code vendeur : préfixe de la société (RC-V002) pour rester unique dans toute l'app. */
+export function prochainCodeVendeur(codes: string[], prefixe?: string): string {
   const max = codes.reduce((m, c) => {
-    const n = /^V(\d+)$/i.exec(c.trim());
+    const n = /^(?:[A-Z0-9]+-)?V(\d+)$/i.exec(c.trim());
     return n ? Math.max(m, Number(n[1])) : m;
   }, 0);
-  return `V${String(max + 1).padStart(3, "0")}`;
+  const code = `V${String(max + 1).padStart(3, "0")}`;
+  return prefixe ? `${prefixe}-${code}` : code;
 }

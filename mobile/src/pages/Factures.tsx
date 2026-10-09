@@ -149,7 +149,7 @@ export default function Factures() {
 
   return (
     <IonPage>
-      <AppHeader large eyebrow={formatLongDate(new Date())} title={t("Bons de livraison")} actions={<AccountButton />}>
+      <AppHeader large eyebrow={formatLongDate(new Date())} title={t("B° Livraison")} actions={<AccountButton />}>
         {isAdmin && (
           <div>
             <FilterChip
@@ -263,7 +263,7 @@ export default function Factures() {
               action={
                 canCreate && (
                   <Button variant="secondary" icon={addOutline} onClick={() => navigate("/factures/new")}>
-                    {t("Nouveau bon de livraison")}
+                    {t("Nouveau B° Livraison")}
                   </Button>
                 )
               }
@@ -310,7 +310,7 @@ export default function Factures() {
         {canCreate && (
           <>
             <FabSpacer />
-            <Fab icon={addOutline} label={t("Nouveau bon de livraison")} onClick={() => navigate("/factures/new")} />
+            <Fab icon={addOutline} label={t("Nouveau B° Livraison")} onClick={() => navigate("/factures/new")} />
           </>
         )}
       </IonContent>

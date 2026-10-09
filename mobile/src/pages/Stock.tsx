@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { IonContent, IonPage, IonRefresher, IonRefresherContent, RefresherEventDetail, useIonViewWillEnter } from "@ionic/react";
 import {
   addOutline,
+  cloudUploadOutline,
   carOutline,
   chevronBackOutline,
   chevronForwardOutline,
@@ -36,6 +37,7 @@ import { ApiError } from "../api/client";
 import { formatColis, formatDateTime, pieces, joinMeta } from "../utils/format";
 import { articleCorrespond, articleParCode } from "../utils/articleSearch";
 import DepotDashboard from "./DepotDashboard";
+import ImportArticlesSheet from "../components/ImportArticlesSheet";
 import {
   AccountButton,
   AppHeader,
@@ -119,6 +121,7 @@ export default function Stock() {
   const [chargements, setChargements] = useState<ChargementResume[]>([]);
   const [sorties, setSorties] = useState<ChargementResume[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
+  const [importOuvert, setImportOuvert] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,6 +204,12 @@ export default function Stock() {
   };
 
   const contenuArticles = () => (
+    <>
+    <Section>
+      <Button variant="secondary" block icon={cloudUploadOutline} onClick={() => setImportOuvert(true)}>
+        {t("Importer depuis Excel")}
+      </Button>
+    </Section>
     <Section flush aside={articles.length > 0 ? tn(articles.length, "{n} article", "{n} articles") : undefined}>
       {articlesFiltres.length === 0 ? (
         <EmptyState
@@ -225,6 +234,7 @@ export default function Stock() {
         </div>
       )}
     </Section>
+    </>
   );
 
   const contenuDepot = () => {
@@ -474,9 +484,9 @@ export default function Stock() {
                 columns={2}
                 options={[
                   { value: "stock", label: t("Stock") },
-                  { value: "entrees", label: t("Bons d'entrée") },
-                  { value: "sorties", label: t("Bons de sortie") },
-                  { value: "retours", label: t("Bons de retour") },
+                  { value: "entrees", label: t("B° Entrée") },
+                  { value: "sorties", label: t("B° Sortie") },
+                  { value: "retours", label: t("B° Retour") },
                 ]}
               />
             ) : (
@@ -548,18 +558,20 @@ export default function Stock() {
           <Fab icon={addOutline} label={t("Nouvel article")} onClick={() => navigate("/articles/new")} />
         ) : lieu === "depot" ? (
           vueDepot === "sorties" ? (
-            <Fab icon={addOutline} label={t("Bon de chargement")} onClick={() => navigate("/stock/chargement")} />
+            <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement")} />
           ) : vueDepot === "retours" ? (
-            <Fab icon={addOutline} label={t("Bon de retour")} onClick={() => navigate("/stock/retour")} />
+            <Fab icon={addOutline} label={t("B° Retour")} onClick={() => navigate("/stock/retour")} />
           ) : (
-            <Fab icon={downloadOutline} label={t("Bon d'entrée")} onClick={() => navigate("/stock/entree")} />
+            <Fab icon={downloadOutline} label={t("B° Entrée")} onClick={() => navigate("/stock/entree")} />
           )
         ) : vueCamion === "retours" ? (
-          <Fab icon={addOutline} label={t("Bon de retour")} onClick={() => navigate("/stock/retour", { state: { vendeurId } })} />
+          <Fab icon={addOutline} label={t("B° Retour")} onClick={() => navigate("/stock/retour", { state: { vendeurId } })} />
         ) : (
-          <Fab icon={addOutline} label={t("Bon de chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId } })} />
+          <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId } })} />
         )}
       </IonContent>
+
+      <ImportArticlesSheet isOpen={importOuvert} onDismiss={() => setImportOuvert(false)} onImporte={fetchData} />
 
       <PickerSheet
         isOpen={vendeurSheet}

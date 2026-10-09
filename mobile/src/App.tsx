@@ -3,7 +3,8 @@ import { Route, Routes } from 'react-router-dom';
 import { IonApp, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import Login from './pages/Login';
-import TabsLayout from './pages/TabsLayout';
+import EspaceSociete from './societe/EspaceSociete';
+import { SocieteProvider } from './societe/SocieteContext';
 import { AuthProvider } from './auth/AuthContext';
 import PrivateRoute from './auth/PrivateRoute';
 import { getLang, onLangChange } from './i18n';
@@ -68,6 +69,7 @@ const App: React.FC = () => {
   return (
   <IonApp>
     <AuthProvider>
+      <SocieteProvider>
       <IonReactRouter key={lang}>
         {/* Connexion ↔ application est un changement de racine, pas une pile de
             navigation : un simple <Routes>. Avec un IonRouterOutlet ici, l'écran
@@ -79,12 +81,13 @@ const App: React.FC = () => {
             path="/*"
             element={
               <PrivateRoute>
-                <TabsLayout />
+                <EspaceSociete />
               </PrivateRoute>
             }
           />
         </Routes>
       </IonReactRouter>
+      </SocieteProvider>
     </AuthProvider>
   </IonApp>
   );

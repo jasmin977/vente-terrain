@@ -38,9 +38,9 @@ type Kind = "chargement" | "retour" | "entree";
 
 // Libellés de chaque bon : titre de l'écran, champ N° et type de numérotation.
 const BONS = {
-  entree: { titre: "Bon d'entrée", numero: "N° bon d'entrée", type: "ENTREE" },
-  chargement: { titre: "Bon de chargement", numero: "N° bon de sortie", type: "SORTIE" },
-  retour: { titre: "Bon de retour", numero: "N° bon de retour", type: "RETOUR" },
+  entree: { titre: "B° Entrée", numero: "N° bon d'entrée", type: "ENTREE" },
+  chargement: { titre: "B° Chargement", numero: "N° bon de sortie", type: "SORTIE" },
+  retour: { titre: "B° Retour", numero: "N° bon de retour", type: "RETOUR" },
 } as const;
 
 /**

@@ -13,6 +13,8 @@ import {
 import { createVendeur, getUser, listUsers, setUserPassword, updateUser } from "../api/auth";
 import type { UserInput, UserSummary } from "../types/auth";
 import { useAuth } from "../auth/AuthContext";
+import { useSociete } from "../societe/SocieteContext";
+import { societeImprimee } from "../utils/societe";
 import { ApiError } from "../api/client";
 import { formatDate } from "../utils/format";
 import { genererMotDePasse, prochainCodeVendeur } from "../utils/password";
@@ -87,7 +89,7 @@ function MotDePasseField({ value, onChange, label }: { value: string; onChange: 
 
 function CarteIdentifiants({ id, titre, onClose }: { id: Identifiants; titre: string; onClose: () => void }) {
   const [toast] = useIonToast();
-  const texte = t("Revive Cosmetix — accès vendeur\nNom : {nom}\nCode : {code}\nMot de passe : {mdp}", { nom: id.nom, code: id.code, mdp: id.password });
+  const texte = t("{societe} — accès vendeur\nNom : {nom}\nCode : {code}\nMot de passe : {mdp}", { societe: societeImprimee().nom || t("Vente Terrain"), nom: id.nom, code: id.code, mdp: id.password });
   const partager = async () => {
     try {
       await Share.share({ title: t("Accès vendeur"), text: texte });
@@ -133,6 +135,7 @@ export default function VendeurForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { societe } = useSociete();
 
   const [form, setForm] = useState<UserInput>(vide);
   const [password, setPassword] = useState("");
@@ -153,7 +156,7 @@ export default function VendeurForm() {
         if (isNew) {
           // Propose le prochain code libre (V002, V003…).
           const users = await listUsers();
-          setForm((f) => ({ ...f, code: prochainCodeVendeur(users.map((u) => u.code)) }));
+          setForm((f) => ({ ...f, code: prochainCodeVendeur(users.map((u) => u.code), societe?.code) }));
         } else {
           const u = await getUser(id!);
           setCompte(u);
@@ -172,7 +175,7 @@ export default function VendeurForm() {
         setLoading(false);
       }
     })();
-  }, [id, isNew]);
+  }, [id, isNew, societe?.code]);
 
   const update = <K extends keyof UserInput>(key: K, value: UserInput[K]) => setForm((f) => ({ ...f, [key]: value }));
 

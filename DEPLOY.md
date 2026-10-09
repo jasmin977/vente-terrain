@@ -16,8 +16,10 @@
 6. **Vérifier** — `https://<votre-projet>.vercel.app/health` doit répondre `{"status":"ok"}`.
 7. **Comptes de départ** — depuis `backend/`, en pointant sur Neon (URL dans *Storage → Neon → .env.local*) et avec vos propres mots de passe (sans eux, ce seraient `admin1234` / `vendeur1234`, publics dans ce dépôt) :
    ```
-   DATABASE_URL="<url Neon>" SEED_ADMIN_PASSWORD="<mot de passe admin>" SEED_VENDEUR_PASSWORD="<mot de passe vendeur>" npm run seed
+   DATABASE_URL="<url Neon>" BLOB_READ_WRITE_TOKEN="<jeton Blob>" SEED_ADMIN_PASSWORD="<mot de passe admin>" SEED_VENDEUR_PASSWORD="<mot de passe vendeur>" npm run seed
    ```
+   `BLOB_READ_WRITE_TOKEN` (Vercel → *Storage → Blob → .env.local*) est **obligatoire en production** : le seed y envoie les photos de `backend/prisma/images/` (nommées `<code>.png|jpg`). Sans lui, il les copie dans `backend/uploads/` (développement local uniquement).
+   Relancer le seed met à jour articles et photos sans toucher aux comptes existants.
 
 Les jours et mois calculés par le serveur suivent l'heure de Tunis (`src/fuseau.ts`, modifiable avec la variable `APP_TIMEZONE`).
 

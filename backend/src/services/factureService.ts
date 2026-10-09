@@ -26,14 +26,17 @@ export interface CreerFactureInput {
 // la décrémentation du stock camion et le calcul des totaux restent cohérents
 // quel que soit le chemin d'entrée (facture créée en ligne ou rejouée depuis le
 // mobile après une période hors-connexion).
-export async function creerFacture(vendeurId: string, data: CreerFactureInput) {
+export async function creerFacture(vendeurId: string, data: CreerFactureInput, societeId: string) {
   if (data.id) {
     const existing = await prisma.facture.findUnique({ where: { id: data.id } });
     if (existing) return existing;
   }
 
   const articleIds = data.lignes.map((l) => l.articleId);
-  const articles = await prisma.article.findMany({ where: { id: { in: articleIds } } });
+  // Client et articles de la société de la requête uniquement.
+  const client = await prisma.client.findFirst({ where: { id: data.clientId, societeId }, select: { id: true } });
+  if (!client) throw new Error("Client introuvable");
+  const articles = await prisma.article.findMany({ where: { id: { in: articleIds }, societeId } });
   const articleMap = new Map(articles.map((a) => [a.id, a]));
 
   let montantHT = 0;

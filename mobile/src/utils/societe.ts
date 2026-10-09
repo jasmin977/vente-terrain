@@ -1,6 +1,19 @@
-// En-tête de la société, imprimé sur les tickets de facture et les bons A4.
-export const SOCIETE = {
-  nom: "BONNE AFFAIRE REVIVE COSMETIX",
-  activite: "Fabrication de parfums et de cosmétiques",
-  matriculeFiscal: "1896028Y/A/M/000",
-};
+import type { Societe } from "../types/societe";
+
+// Société dont l'en-tête est imprimé (tickets, bons A4) : celle ouverte dans
+// l'app, renseignée par SocieteProvider (vendeur : la sienne, même hors ligne).
+let courante: Societe | null = null;
+
+export function definirSocieteImprimee(societe: Societe | null) {
+  courante = societe;
+}
+
+export function societeImprimee() {
+  return {
+    nom: courante?.nom ?? "",
+    activite: courante?.activite ?? "",
+    matriculeFiscal: courante?.matriculeFiscal ?? "",
+    adresse: courante?.adresse ?? "",
+    telephone: courante?.telephone ?? "",
+  };
+}

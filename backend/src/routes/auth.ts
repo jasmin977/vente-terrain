@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 
 export const authRouter = Router();
 
@@ -41,16 +41,29 @@ authRouter.post("/login", async (req, res) => {
 
   const token = signerJeton(user);
 
-  res.json({
-    token,
-    user: { id: user.id, code: user.code, nom: user.nom, role: user.role },
-  });
+  res.json({ token, user: await compteAvecSociete(user.id) });
 });
 
+// Compte connecté ; pour un vendeur, sa société (en-tête des tickets et des
+// bons, logo de l'écran d'accueil), gardée par l'app pour le travail hors ligne.
+async function compteAvecSociete(id: string) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id }, include: { societe: true } });
+  return {
+    id: user.id,
+    code: user.code,
+    nom: user.nom,
+    role: user.role,
+    telephone: user.telephone,
+    societe: user.societe,
+  };
+}
+
 authRouter.get("/me", requireAuth, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
-  if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
-  res.json({ id: user.id, code: user.code, nom: user.nom, role: user.role, telephone: user.telephone });
+  try {
+    res.json(await compteAvecSociete(req.user!.id));
+  } catch {
+    res.status(404).json({ error: "Utilisateur introuvable" });
+  }
 });
 
 // Changement de son propre mot de passe (l'admin n'a personne pour le faire à
@@ -153,24 +166,25 @@ function erreurUnicite(res: Response, err: unknown) {
   return res.status(500).json({ error: "Erreur serveur" });
 }
 
-authRouter.get("/users", requireAuth, requireAdmin, async (_req, res) => {
-  const users = await prisma.user.findMany({ select: userSelect, orderBy: { nom: "asc" } });
+authRouter.get("/users", requireAuth, requireAdmin, requireSociete, async (req, res) => {
+  const users = await prisma.user.findMany({ where: { societeId: req.societeId }, select: userSelect, orderBy: { nom: "asc" } });
   res.json(users);
 });
 
-authRouter.get("/users/:id", requireAuth, requireAdmin, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: userSelect });
+authRouter.get("/users/:id", requireAuth, requireAdmin, requireSociete, async (req, res) => {
+  const user = await prisma.user.findFirst({ where: { id: req.params.id, societeId: req.societeId }, select: userSelect });
   if (!user) return res.status(404).json({ error: "Compte introuvable" });
   res.json(user);
 });
 
-authRouter.post("/users", requireAuth, requireAdmin, async (req, res) => {
+// Création d'un vendeur dans la société courante.
+authRouter.post("/users", requireAuth, requireAdmin, requireSociete, async (req, res) => {
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: premiereErreur(parsed.error) });
   const { password, ...rest } = parsed.data;
   try {
     const user = await prisma.user.create({
-      data: { ...rest, passwordHash: await bcrypt.hash(password, 10) },
+      data: { ...rest, role: "VENDEUR", societeId: req.societeId!, passwordHash: await bcrypt.hash(password, 10) },
       select: userSelect,
     });
     res.status(201).json(user);
@@ -179,7 +193,7 @@ authRouter.post("/users", requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-authRouter.put("/users/:id", requireAuth, requireAdmin, async (req, res) => {
+authRouter.put("/users/:id", requireAuth, requireAdmin, requireSociete, async (req, res) => {
   const parsed = updateUserSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: premiereErreur(parsed.error) });
   const data = parsed.data;
@@ -187,7 +201,7 @@ authRouter.put("/users/:id", requireAuth, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "Vous ne pouvez pas désactiver votre propre compte" });
   }
   try {
-    const existant = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existant = await prisma.user.findFirst({ where: { id: req.params.id, societeId: req.societeId } });
     if (!existant) return res.status(404).json({ error: "Compte introuvable" });
     const user = await prisma.user.update({
       where: { id: req.params.id },
@@ -206,11 +220,11 @@ authRouter.put("/users/:id", requireAuth, requireAdmin, async (req, res) => {
 
 // Nouveau mot de passe défini par l'admin ; le vendeur est déconnecté de ses
 // appareils et devra utiliser le nouveau mot de passe.
-authRouter.post("/users/:id/password", requireAuth, requireAdmin, async (req, res) => {
+authRouter.post("/users/:id/password", requireAuth, requireAdmin, requireSociete, async (req, res) => {
   const parsed = passwordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: premiereErreur(parsed.error) });
   try {
-    const existant = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existant = await prisma.user.findFirst({ where: { id: req.params.id, societeId: req.societeId } });
     if (!existant) return res.status(404).json({ error: "Compte introuvable" });
     await prisma.user.update({
       where: { id: req.params.id },

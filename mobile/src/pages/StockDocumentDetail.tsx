@@ -37,7 +37,7 @@ async function charger(kind: Kind, id: string): Promise<Document> {
     const e = await getEntreeDepot(id);
     return {
       titre: e.reference || t("Bon d'entrée sans référence"),
-      sousTitre: `${t("Bon d'entrée")}${e.admin ? ` · ${e.admin.nom}` : ""}`,
+      sousTitre: `${t("B° Entrée")}${e.admin ? ` · ${e.admin.nom}` : ""}`,
       date: e.date,
       deletedAt: e.deletedAt,
       totalPieces: e.totalPieces,
@@ -56,9 +56,9 @@ async function charger(kind: Kind, id: string): Promise<Document> {
   const c = await getChargement(id);
   const chargement = c.sens === "CHARGEMENT";
   return {
-    titre: c.reference || (chargement ? t("Bon de chargement") : t("Bon de retour")),
+    titre: c.reference || (chargement ? t("B° Chargement") : t("B° Retour")),
     sousTitre: joinMeta([
-      chargement ? t("Bon de chargement") : t("Bon de retour"),
+      chargement ? t("B° Chargement") : t("B° Retour"),
       t("Camion de {nom}", { nom: c.vendeur.nom }),
       chargement ? t("dépôt → camion") : t("camion → dépôt"),
     ]),
@@ -161,7 +161,7 @@ export default function StockDocumentDetail({ kind }: { kind: Kind }) {
 
   return (
     <IonPage>
-      <AppHeader backHref="/stock" title={doc?.titre ?? (kind === "entree" ? t("Bon d'entrée") : t("Bon de chargement"))}
+      <AppHeader backHref="/stock" title={doc?.titre ?? (kind === "entree" ? t("B° Entrée") : t("B° Chargement"))}
         eyebrow={doc ? formatDateTime(doc.date) : undefined}
         actions={
           doc && (

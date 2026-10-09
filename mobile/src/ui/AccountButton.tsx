@@ -13,6 +13,8 @@ import Button from "./Button";
 import Field from "./Field";
 import { getLang, setLang, t, tn, type Lang } from "../i18n";
 import SyncButton from "../components/SyncButton";
+import SocieteLogo from "../components/SocieteLogo";
+import { useSociete } from "../societe/SocieteContext";
 import MonMotDePasseSheet from "../components/MonMotDePasseSheet";
 import { useEtatSync } from "../offline/sync";
 import Segmented from "./Segmented";
@@ -31,6 +33,7 @@ export default function AccountButton() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [monMotDePasse, setMonMotDePasse] = useState(false);
   const { file } = useEtatSync();
+  const { societe, changer } = useSociete();
 
   useEffect(() => {
     if (open) getPrinterIp().then((v) => {
@@ -73,6 +76,29 @@ export default function AccountButton() {
             />
           </Group>
         </Section>
+
+        {societe && (
+          <Section label={t("Société")}>
+            <Group>
+              <Row
+                thumb
+                leading={<SocieteLogo nom={societe.nom} logo={societe.logo} />}
+                title={societe.nom}
+                meta={societe.activite ?? societe.code}
+                {...(user.role === "ADMIN"
+                  ? {
+                      chevron: true,
+                      onClick: () => {
+                        setOpen(false);
+                        changer();
+                      },
+                    }
+                  : {})}
+              />
+            </Group>
+            {user.role === "ADMIN" && <p className="rc-footnote rc-sync__note">{t("Touchez pour changer de société ou en créer une.")}</p>}
+          </Section>
+        )}
 
         {user.role === "ADMIN" && (
           <Section label={t("Administration")}>

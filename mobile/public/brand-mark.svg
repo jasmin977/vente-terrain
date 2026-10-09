@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" role="img" aria-label="Vente Terrain">
+  <!-- Monogramme provisoire « VT » (en attendant le logo de l'app). -->
+  <g fill="none" stroke="#1a1816" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 34 L50 110 L78 34"/>
+    <path d="M70 34 H122"/>
+    <path d="M96 34 V110"/>
+  </g>
+</svg>

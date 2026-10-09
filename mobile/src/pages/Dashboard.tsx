@@ -34,6 +34,7 @@ import {
   Tag,
 } from "../ui";
 import type { BarRankingItem, ColumnPoint } from "../ui";
+import DemarrageSociete from "../components/DemarrageSociete";
 
 const HACHURE_CREDIT = "repeating-linear-gradient(135deg, var(--rc-chart-credit) 0 2px, var(--rc-warning-soft) 2px 4px)";
 
@@ -377,6 +378,9 @@ export default function Dashboard() {
             {error}
           </PageNotice>
         )}
+
+        {/* Société encore vide : importer les articles puis ajouter les vendeurs. */}
+        <DemarrageSociete />
 
         {loading && !data ? (
           <Section flush>

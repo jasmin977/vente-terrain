@@ -1,14 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
-import { requireAdmin, requireAuth } from "../middleware/auth";
-import { situationsClients } from "../services/creditService";
+import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
+import { situationsSociete } from "../services/creditService";
 
 // Tableau de bord de l'admin : chiffre d'affaires, encaissements, crédits,
 // vendeurs, top clients / produits, valeur du stock et marge, sur une période
 // (jour / semaine / mois, ou un mois passé via ?mois=AAAA-MM) comparée à la
 // période précédente de même nature.
 export const tableauDeBordRouter = Router();
-tableauDeBordRouter.use(requireAuth, requireAdmin);
+tableauDeBordRouter.use(requireAuth, requireAdmin, requireSociete);
 
 type Periode = "jour" | "semaine" | "mois";
 const arrondi = (n: number) => Math.round(n * 1000) / 1000;
@@ -77,7 +77,9 @@ tableauDeBordRouter.get("/", async (req, res) => {
       : "mois";
     const ref = reference(periode, req.query.mois);
     const { debut, fin, precedentDebut, precedentFin } = bornes(periode, ref.instant, ref.complete);
-    const validees = { statut: "VALIDEE" as const, deletedAt: null };
+    // Bons de livraison validés des clients de la société.
+    const societeId = req.societeId!;
+    const validees = { statut: "VALIDEE" as const, deletedAt: null, client: { societeId } };
 
     const [factures, precedentes, paiements, lignes, stockDepot, stockCamion, vendeurs, situations] = await Promise.all([
       prisma.facture.findMany({
@@ -102,6 +104,7 @@ tableauDeBordRouter.get("/", async (req, res) => {
       prisma.paiement.findMany({
         where: {
           deletedAt: null,
+          client: { societeId },
           date: { gte: debut, lte: fin },
           OR: [{ factureId: null }, { facture: { statut: "VALIDEE", deletedAt: null } }],
         },
@@ -117,10 +120,10 @@ tableauDeBordRouter.get("/", async (req, res) => {
           article: { select: { designation: true, prixAchat: true } },
         },
       }),
-      prisma.stockDepot.findMany({ where: { quantite: { gt: 0 } }, include: { article: true } }),
-      prisma.stockCamion.findMany({ where: { quantite: { gt: 0 } }, include: { article: true } }),
-      prisma.user.findMany({ where: { role: "VENDEUR" }, select: { id: true, nom: true, code: true, actif: true } }),
-      situationsClients(),
+      prisma.stockDepot.findMany({ where: { quantite: { gt: 0 }, article: { societeId } }, include: { article: true } }),
+      prisma.stockCamion.findMany({ where: { quantite: { gt: 0 }, vendeur: { societeId } }, include: { article: true } }),
+      prisma.user.findMany({ where: { role: "VENDEUR", societeId }, select: { id: true, nom: true, code: true, actif: true } }),
+      situationsSociete(societeId),
     ]);
 
     // ---- Chiffre d'affaires
@@ -213,7 +216,7 @@ tableauDeBordRouter.get("/", async (req, res) => {
     debiteurs.sort((a, b) => b.totalDu - a.totalDu);
     const topDebiteurs = debiteurs.slice(0, 5);
     const clientsDebiteurs = await prisma.client.findMany({
-      where: { id: { in: topDebiteurs.map((d) => d.clientId) } },
+      where: { id: { in: topDebiteurs.map((d) => d.clientId) }, societeId },
       select: { id: true, nomCommerce: true, code: true },
     });
     const totalDu = arrondi(debiteurs.reduce((s, d) => s + d.totalDu, 0));
