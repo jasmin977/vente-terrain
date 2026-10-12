@@ -35,11 +35,15 @@ export function SocieteProvider({ children }: { children: ReactNode }) {
   const [accueil, setAccueil] = useState(false);
   const [generation, setGeneration] = useState(0);
   const minuterie = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const ouverteId = useRef<string | null>(null);
 
   const appliquer = useCallback((s: Societe | null, avecAccueil: boolean) => {
     setSociete(s);
     definirSocieteImprimee(s);
-    if (s && avecAccueil) {
+    // La même société réappliquée (session rafraîchie) : rien à réinitialiser.
+    const nouvelle = (s?.id ?? null) !== ouverteId.current;
+    ouverteId.current = s?.id ?? null;
+    if (s && avecAccueil && nouvelle) {
       setGeneration((g) => g + 1);
       setAccueil(true);
       clearTimeout(minuterie.current);

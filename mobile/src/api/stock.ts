@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { Peremption } from "../types/lot";
 import type {
   ChargementDetail,
   ChargementInput,
@@ -40,6 +41,30 @@ export function getMouvementsParArticle(vendeurId: string, plage?: PlageDates): 
 
 export function getStockDepot(): Promise<StockDepotItem[]> {
   return apiRequest<StockDepotItem[]>("/stock/depot");
+}
+
+/** L'admin confirme que ces articles n'ont réellement aucun stock au dépôt. */
+export function confirmerSansStock(articleIds: string[]): Promise<{ confirmes: number }> {
+  return apiRequest<{ confirmes: number }>("/stock/depot/sans-stock-confirme", { method: "POST", body: { articleIds } });
+}
+
+/** Lots expirés ou proches de l'expiration, et articles périssables à dater. */
+export function getPeremption(): Promise<Peremption> {
+  return apiRequest<Peremption>("/stock/depot/peremption");
+}
+
+/** Donne une date d'expiration à des pièces du dépôt qui n'en ont pas. */
+export function daterLots(articleId: string, lignes: { dateExpiration: string; quantite: number }[]) {
+  return apiRequest<void>("/stock/depot/lots/dater", { method: "POST", body: { articleId, lignes } });
+}
+
+export function modifierDateLot(id: string, dateExpiration: string) {
+  return apiRequest<void>(`/stock/depot/lots/${id}`, { method: "PUT", body: { dateExpiration } });
+}
+
+/** Retire un lot du dépôt (périmé, jeté). */
+export function retirerLot(id: string) {
+  return apiRequest<void>(`/stock/depot/lots/${id}/retirer`, { method: "POST", body: {} });
 }
 
 export function createEntreeDepot(input: EntreeDepotInput) {

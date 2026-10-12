@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { cameraOutline } from "ionicons/icons";
 import { createSociete, updateSociete } from "../api/societes";
@@ -51,7 +52,8 @@ export default function SocieteFormSheet({
     try {
       const photo = await Camera.getPhoto({
         resultType: CameraResultType.DataUrl,
-        source: CameraSource.Prompt,
+        // Navigateur : sélecteur de fichier (le choix « photo ou galerie » du téléphone n'existe pas).
+        source: Capacitor.isNativePlatform() ? CameraSource.Prompt : CameraSource.Photos,
         quality: 80,
         width: 512,
         promptLabelHeader: t("Logo de la société"),

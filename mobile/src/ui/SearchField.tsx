@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IonIcon, useIonToast } from "@ionic/react";
 import { barcodeOutline, closeCircle, searchOutline } from "ionicons/icons";
-import { scannerCodeBarre } from "../lib/barcode";
+import { scanCameraDisponible, scannerCodeBarre } from "../lib/barcode";
 import { t } from "../i18n";
 
 interface SearchFieldProps {
@@ -43,7 +43,11 @@ export default function SearchField({ value, onChange, placeholder, label = "Rec
         spellCheck={false}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key !== "Enter") return;
+          const saisie = (e.target as HTMLInputElement).value.trim();
+          // Douchette (ordinateur) : un code-barres tapé puis Entrée vaut un scan.
+          if (onScan && /^\d{8,14}$/.test(saisie)) onScan(saisie);
+          (e.target as HTMLInputElement).blur();
         }}
       />
       {value && (
@@ -51,7 +55,7 @@ export default function SearchField({ value, onChange, placeholder, label = "Rec
           <IonIcon icon={closeCircle} aria-hidden="true" style={{ fontSize: 20, color: "var(--rc-ink-3)" }} />
         </button>
       )}
-      {onScan && (
+      {onScan && scanCameraDisponible() && (
         <button
           type="button"
           className="rc-search__scan"

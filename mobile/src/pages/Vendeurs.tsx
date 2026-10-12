@@ -16,13 +16,15 @@ import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { initials } from "../utils/labels";
 import { texteCorrespond } from "../utils/articleSearch";
-import { AppHeader, EmptyState, Fab, FabSpacer, PageNotice, Row, SearchField, Section, SkeletonList, Tag } from "../ui";
+import { AppHeader, EmptyState, Fab, FabSpacer, PageNotice, Row, SearchField, Section, SkeletonList, Tag, useEcranLarge } from "../ui";
 import { t, tn } from "../i18n";
 
 /** Comptes vendeurs (admin) : actifs d'abord, désactivés grisés. */
 export default function Vendeurs() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Sur le web, Vendeurs est une entrée de la barre latérale : pas de bouton retour.
+  const enWeb = useEcranLarge();
   const isAdmin = user?.role === "ADMIN";
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [query, setQuery] = useState("");
@@ -69,7 +71,7 @@ export default function Vendeurs() {
 
   return (
     <IonPage>
-      <AppHeader backHref="/factures" title={t("Vendeurs")}>
+      <AppHeader backHref={enWeb ? undefined : "/factures"} title={t("Vendeurs")}>
         <SearchField value={query} onChange={setQuery} placeholder={t("Nom, code, téléphone…")} />
       </AppHeader>
 

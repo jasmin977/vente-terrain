@@ -11,8 +11,8 @@ interface SegmentedProps<T extends string> {
   options: SegmentedOption<T>[];
   onChange: (value: T) => void;
   label: string;
-  /** "tiles" = larger separate choices (e.g. payment modes). */
-  variant?: "track" | "tiles";
+  /** "tiles" = larger separate choices (e.g. payment modes) ; "onglets" = ligne d'onglets soulignés (vues d'un même écran). */
+  variant?: "track" | "tiles" | "onglets";
   wrap?: boolean;
   /** Grille à 2 colonnes pour les libellés longs (avec wrap). */
   columns?: 2 | 4;
@@ -46,7 +46,7 @@ export default function Segmented<T extends string>({
       ref={ref}
       role="radiogroup"
       aria-label={label}
-      className={`rc-seg${variant === "tiles" ? " rc-seg--tiles" : ""}${wrap ? " rc-seg--wrap" : ""}${wrap && columns === 2 ? " rc-seg--cols-2" : ""}${wrap && columns !== 2 && options.length === 3 ? " rc-seg--cols-3" : ""}`}
+      className={`rc-seg${variant === "tiles" ? " rc-seg--tiles" : ""}${variant === "onglets" ? " rc-seg--onglets" : ""}${wrap ? " rc-seg--wrap" : ""}${wrap && columns === 2 ? " rc-seg--cols-2" : ""}${wrap && columns !== 2 && options.length === 3 ? " rc-seg--cols-3" : ""}`}
     >
       {options.map((opt, i) => {
         const checked = opt.value === value;

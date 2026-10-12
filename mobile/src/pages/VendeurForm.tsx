@@ -45,7 +45,7 @@ interface Identifiants {
 }
 
 /** Champ mot de passe avec affichage et génération. */
-function MotDePasseField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+function MotDePasseField({ value, onChange, label, nom }: { value: string; onChange: (v: string) => void; label: string; nom: string }) {
   const [visible, setVisible] = useState(false);
   const tropCourt = value.length > 0 && value.length < MIN;
   return (
@@ -76,7 +76,7 @@ function MotDePasseField({ value, onChange, label }: { value: string; onChange: 
         size="lg"
         icon={refreshOutline}
         onClick={() => {
-          onChange(genererMotDePasse());
+          onChange(genererMotDePasse(nom));
           setVisible(true);
         }}
         style={{ alignSelf: "start", marginTop: 26 }}
@@ -346,7 +346,7 @@ export default function VendeurForm() {
             {isNew ? (
               <Section label={t("Mot de passe")}>
                 <Group pad>
-                  <MotDePasseField label={t("Mot de passe")} value={password} onChange={setPassword} />
+                  <MotDePasseField label={t("Mot de passe")} value={password} onChange={setPassword} nom={form.nom} />
                 </Group>
               </Section>
             ) : (
@@ -400,7 +400,7 @@ export default function VendeurForm() {
       <Sheet isOpen={resetOpen} title={t("Nouveau mot de passe")} height="auto" onDismiss={() => setResetOpen(false)}>
         <Section>
           <div className="rc-fields">
-            <MotDePasseField label={t("Nouveau mot de passe")} value={nouveauMdp} onChange={setNouveauMdp} />
+            <MotDePasseField label={t("Nouveau mot de passe")} value={nouveauMdp} onChange={setNouveauMdp} nom={form.nom} />
             <Notice tone="info">
               {compte?.nom ?? t("Le vendeur")} sera déconnecté de ses appareils et devra utiliser ce nouveau mot de passe.
             </Notice>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IonAlert, IonIcon } from "@ionic/react";
 import { keyOutline, logOutOutline, peopleOutline, printOutline } from "ionicons/icons";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../auth/AuthContext";
 import { getPrinterIp, setPrinterIp } from "../lib/printerSettings";
 import { initials } from "../utils/labels";
@@ -61,7 +62,9 @@ export default function AccountButton() {
         </span>
       </button>
 
-      <Sheet isOpen={open} title={t("Compte")} height="auto" onDismiss={() => setOpen(false)}>
+      {/* Admin : plus de rubriques que l'écran n'en montre → feuille pleine hauteur
+          (défilement natif d'IonContent). Vendeur : feuille ajustée au contenu. */}
+      <Sheet isOpen={open} title={t("Compte")} height={user.role === "ADMIN" ? "full" : "auto"} onDismiss={() => setOpen(false)}>
         <Section>
           <Group>
             <Row
@@ -84,7 +87,7 @@ export default function AccountButton() {
                 thumb
                 leading={<SocieteLogo nom={societe.nom} logo={societe.logo} />}
                 title={societe.nom}
-                meta={societe.activite ?? societe.code}
+                meta={user.role === "ADMIN" ? t("Changer de société") : societe.activite ?? societe.code}
                 {...(user.role === "ADMIN"
                   ? {
                       chevron: true,
@@ -96,7 +99,6 @@ export default function AccountButton() {
                   : {})}
               />
             </Group>
-            {user.role === "ADMIN" && <p className="rc-footnote rc-sync__note">{t("Touchez pour changer de société ou en créer une.")}</p>}
           </Section>
         )}
 
@@ -151,30 +153,35 @@ export default function AccountButton() {
           />
         </Section>
 
-        <Section label={t("Imprimante")}>
-          <Field
-            label={t("Adresse IP Wi-Fi")}
-            value={ip}
-            onChange={setIp}
-            inputMode="decimal"
-            placeholder="192.168.1.100"
-            prefix={<IonIcon icon={printOutline} aria-hidden="true" />}
-            hint={t("Visible dans le menu réseau de l'imprimante.")}
-            suffix={
-              ipChanged ? (
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    await setPrinterIp(ip.trim());
-                    setSavedIp(ip.trim());
-                  }}
-                >
-                  {t("Enregistrer")}
-                </Button>
-              ) : undefined
-            }
-          />
-        </Section>
+        {/* L'admin n'imprime qu'occasionnellement : l'adresse lui est demandée
+            à sa première impression de ticket. */}
+        {/* Ticket thermique par Wi-Fi : application du téléphone seulement (le navigateur n'ouvre pas de connexion directe). */}
+        {user.role === "VENDEUR" && Capacitor.isNativePlatform() && (
+          <Section label={t("Imprimante")}>
+            <Field
+              label={t("Adresse IP Wi-Fi")}
+              value={ip}
+              onChange={setIp}
+              inputMode="decimal"
+              placeholder="192.168.1.100"
+              prefix={<IonIcon icon={printOutline} aria-hidden="true" />}
+              hint={t("Visible dans le menu réseau de l'imprimante.")}
+              suffix={
+                ipChanged ? (
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      await setPrinterIp(ip.trim());
+                      setSavedIp(ip.trim());
+                    }}
+                  >
+                    {t("Enregistrer")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          </Section>
+        )}
 
         <Section>
           <Button variant="danger" block icon={logOutOutline} onClick={() => setConfirmLogout(true)}>

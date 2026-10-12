@@ -6,6 +6,8 @@ import SearchField from "./SearchField";
 import Row from "./Row";
 import Button from "./Button";
 import { EmptyState } from "./States";
+import ChargerPlus from "./ChargerPlus";
+import { useListeProgressive } from "./useListeProgressive";
 import { texteCorrespond } from "../utils/articleSearch";
 import { t } from "../i18n";
 
@@ -17,6 +19,10 @@ export interface PickerOption {
   trailing?: ReactNode;
   /** Extra text matched by the search (codes, city…). */
   keywords?: string;
+  /** 1 = rangé sous l'élément précédent de niveau 0 (retrait à gauche). */
+  niveau?: 0 | 1;
+  /** Intitulé de groupe : affiché mais pas sélectionnable ; gardé tant qu'un de ses éléments correspond à la recherche. */
+  titre?: boolean;
 }
 
 /* ---------- Trigger: looks like a field, opens a sheet ---------- */
@@ -100,8 +106,24 @@ export function PickerSheet({
 
   const filtered = useMemo(() => {
     if (!query.trim()) return options;
-    return options.filter((o) => texteCorrespond(`${o.label} ${o.keywords ?? ""}`, query));
+    const trouves = options.filter((o) => !o.titre && texteCorrespond(`${o.label} ${o.keywords ?? ""}`, query));
+    if (!options.some((o) => o.titre)) return trouves;
+    // Groupes : un intitulé reste affiché s'il a au moins un élément trouvé.
+    const garde = new Set(trouves);
+    const resultat: PickerOption[] = [];
+    let intitule: PickerOption | null = null;
+    for (const o of options) {
+      if (o.titre) intitule = o;
+      else if (garde.has(o)) {
+        if (intitule) resultat.push(intitule);
+        intitule = null;
+        resultat.push(o);
+      }
+    }
+    return resultat;
   }, [options, query]);
+
+  const liste = useListeProgressive(filtered, query);
 
   return (
     <Sheet
@@ -140,11 +162,19 @@ export function PickerSheet({
         <EmptyState icon={searchOutline} title={emptyLabel} message={t("Essayez un autre nom ou code.")} />
       ) : (
         <div role="listbox" aria-label={title}>
-          {filtered.map((o) => {
+          {liste.visibles.map((o) => {
+            if (o.titre) {
+              return (
+                <div key={o.value} className="rc-picker__titre" role="presentation">
+                  {o.label}
+                </div>
+              );
+            }
             const selected = o.value === value;
             return (
               <Row
                 key={o.value}
+                className={o.niveau === 1 ? "rc-row--niveau2" : undefined}
                 role="option"
                 aria-selected={selected}
                 title={o.label}
@@ -161,6 +191,7 @@ export function PickerSheet({
               />
             );
           })}
+          <ChargerPlus reste={liste.reste} onPlus={liste.plus} />
         </div>
       )}
     </Sheet>

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { IonAlert, IonIcon, IonSpinner, useIonToast } from "@ionic/react";
 import { cloudDoneOutline, cloudDownloadOutline, cloudOfflineOutline, cloudUploadOutline, syncOutline } from "ionicons/icons";
 import { lireMajCatalogue, mettreAJourCatalogue, synchroniser, useEtatSync } from "../offline/sync";
-import { nbImagesEnregistrees, useImagesHorsLigne } from "../offline/images";
 import { retirer, type ActionEnAttente } from "../offline/file";
 import { lireCache } from "../offline/cache";
 import type { Client } from "../types/client";
@@ -45,7 +44,6 @@ export default function SyncButton() {
   const [toast] = useIonToast();
   const [majCatalogue, setMajCatalogue] = useState<string | null>(null);
   const [progression, setProgression] = useState<string | null>(null);
-  useImagesHorsLigne();
 
   useEffect(() => {
     if (!open) return;
@@ -55,19 +53,15 @@ export default function SyncButton() {
 
   const catalogueDuJour = majCatalogue !== null && new Date(majCatalogue).toDateString() === new Date().toDateString();
 
-  // Le matin, avec réseau : données à jour + photos enregistrées pour la journée.
+  // Le matin, avec réseau : données à jour pour la journée.
   const mettreAJour = async () => {
     setProgression(t("Synchronisation…"));
     try {
-      const { sync, images } = await mettreAJourCatalogue((fait, total) =>
-        setProgression(t("Photos {fait} / {total}…", { fait, total }))
-      );
+      const { sync } = await mettreAJourCatalogue();
       lireMajCatalogue().then(setMajCatalogue);
       const message = sync.injoignable
         ? t("Serveur injoignable : connectez-vous à Internet puis réessayez.")
-        : images && images.echecs > 0
-          ? t("Catalogue mis à jour, {n} photo(s) non téléchargée(s).", { n: images.echecs })
-          : t("Catalogue à jour pour la journée.");
+        : t("Catalogue à jour pour la journée.");
       toast({ message, duration: 2600, position: "top", cssClass: "rc-toast" });
     } finally {
       setProgression(null);
@@ -156,7 +150,6 @@ export default function SyncButton() {
                   )
                 }
               />
-              <Row compact label={t("Photos sur le téléphone")} trailing={<span className="rc-row__value rc-num">{nbImagesEnregistrees()}</span>} />
             </Group>
             <Button
               variant={catalogueDuJour ? "secondary" : "primary"}
@@ -169,7 +162,7 @@ export default function SyncButton() {
               {progression ?? t("Mettre à jour le catalogue")}
             </Button>
             <p className="rc-footnote">
-              {t("Chaque matin avec réseau, avant la tournée : articles, prix, clients, crédits et photos sont gardés sur le téléphone pour la journée.")}
+              {t("Chaque matin avec réseau, avant la tournée : articles, prix, clients et crédits sont gardés sur le téléphone pour la journée. Les photos ne s'affichent qu'en ligne.")}
             </p>
           </div>
         </Section>

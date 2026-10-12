@@ -68,3 +68,21 @@ Ionic provides routing, transitions, scrolling, refresher, modals/sheets, alerts
 - Raw enum values on screen (`ESPECES`, `CREDIT`)
 - Gradients, glass, neon, decorative illustrations, a shadow on every card
 - Body text under 13px, and tap targets under 44px
+
+## Web layer (`src/theme/web.css`)
+
+The same app serves phones, tablets and desktop browsers. Nothing in `web.css` applies below 768px: the phone layout is untouched.
+
+| Breakpoint | Layout |
+|---|---|
+| < 768px | Phone: bottom tab bar, bottom sheets, full-width content |
+| ≥ 768px | Side menu (`components/BarreLaterale.tsx`, 232px; 256px from 1100px) with sub-menus, content centred in a 1160px column, sheets become centred dialogs (`Sheet` drops its breakpoints/handle through `useEcranLarge`) |
+| ≥ 900px | `.rc-grille` containers lay their sections out on two columns (dashboard, stock overview, article form); `.rc-span` forces full width |
+| ≥ 1100px | Lists with extra columns become tables (`EnteteTableau` / `CellulesTableau` in `ui/Tableau.tsx`, row class `rc-row--tableau`) |
+
+Rules:
+- The side menu replaces the bottom tab bar (hidden ≥ 768px). What a phone does with in-page tabs becomes a sub-menu: Stock ▸ Dépôt / Camion (`/stock?lieu=…`), Clients ▸ Clients / Crédits (`/clients?vue=…`), Inventaires ▸ Dépôt / Camion (`/inventaires?lieu=…`); **Articles** is its own item (`/stock?lieu=articles`). Screens read the choice with `useVueUrl` (`utils/useVueUrl.ts`) and hide their segmented control when `useEcranLarge()` is true; the phone layout keeps its tabs.
+- Wide layouts reuse existing components; web-only markup is hidden by default (`rc-web-only`, `rc-tableau__cellule`) and revealed in `web.css`.
+- Use `useEcranLarge()` (`ui/useMediaQuery.ts`) when behaviour — not only style — differs (back button, sheet vs dialog).
+- Native-only features need a web path or are hidden on the web: no camera scanner (a hardware scanner types the code + Enter, which `SearchField` treats as a scan; see `scanCameraDisponible()` in `lib/barcode.ts`); files/PDF → download or browser print; thermal ticket and OCR date reading are hidden, expiry dates are typed.
+- The 3D depot plan (`pages/Entrepot3D.tsx`, `entrepot3d/`) is web-only: the phone app hides its entry point (`Capacitor.isNativePlatform()`) and redirects `/stock/entrepot` to `/stock`.

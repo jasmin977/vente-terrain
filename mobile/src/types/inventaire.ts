@@ -21,7 +21,7 @@ export interface ResumeInventaire {
 export interface LigneInventaire {
   articleId: string;
   article: Article;
-  /** Suit le stock camion tant que l'inventaire est en cours ; figée ensuite. */
+  /** Suit le stock (camion ou dépôt) tant que l'inventaire est en cours ; figée ensuite. */
   quantiteTheorique: number;
   /** null = pas encore compté. */
   quantiteReelle: number | null;
@@ -30,10 +30,14 @@ export interface LigneInventaire {
   note: string | null;
 }
 
+export type LieuInventaire = "CAMION" | "DEPOT";
+
 export interface InventaireResume {
   id: string;
-  vendeurId: string;
-  vendeur: Personne;
+  /** Camion inventorié ; null = inventaire du dépôt. */
+  vendeurId: string | null;
+  vendeur: Personne | null;
+  lieu: LieuInventaire;
   admin: Personne;
   statut: StatutInventaire;
   note?: string | null;

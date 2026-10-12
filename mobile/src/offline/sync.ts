@@ -3,11 +3,12 @@ import { App } from "@capacitor/app";
 import { Network } from "@capacitor/network";
 import { ApiError, apiRequest, estErreurReseau } from "../api/client";
 import type { Article } from "../types/article";
+import type { Categorie } from "../types/categorie";
 import type { Client } from "../types/client";
 import type { CreditClient } from "../types/credit";
 import type { Facture } from "../types/facture";
-import { ecrireCache, ecrireDerniereSync, lireCache, lireDerniereSync, recalerNumero } from "./cache";
-import { chargerImagesHorsLigne, enregistrerImagesCatalogue, type ResultatImages } from "./images";
+import { ecrireCache, ecrireDerniereSync, lireDerniereSync, recalerNumero } from "./cache";
+import { nettoyerAnciennesImages } from "./images";
 import { lireFile, marquerErreur, retirer, surChangementFile, type ActionEnAttente } from "./file";
 import { ecrire, lire, modeHorsLigne } from "./stockage";
 
@@ -70,13 +71,15 @@ function envoyer(a: ActionEnAttente): Promise<unknown> {
 /** Recharge les données de référence du vendeur (après l'envoi de ses actions). */
 export async function rafraichirDonnees(): Promise<boolean> {
   const lecture = { timeoutMs: DELAI_LECTURE };
-  const [articles, clients, credits, factures, numero] = await Promise.allSettled([
+  const [articles, clients, credits, factures, numero, categories] = await Promise.allSettled([
     apiRequest<Article[]>("/articles", lecture),
     apiRequest<Client[]>("/clients", lecture),
     apiRequest<CreditClient[]>("/credits", lecture),
     apiRequest<Facture[]>("/factures", lecture),
     apiRequest<{ numero: string }>("/factures/numero-suivant", lecture),
+    apiRequest<Categorie[]>("/categories", lecture),
   ]);
+  if (categories.status === "fulfilled") await ecrireCache("categories", categories.value);
   if (articles.status === "fulfilled") await ecrireCache("articles", articles.value);
   if (clients.status === "fulfilled") await ecrireCache("clients", clients.value);
   if (credits.status === "fulfilled") await ecrireCache("credits", credits.value);
@@ -139,21 +142,13 @@ export const lireMajCatalogue = () => lire<string | null>("maj-catalogue", null)
 
 /**
  * Avant la tournée (avec réseau) : envoie les actions en attente, recharge
- * articles, clients et crédits, puis enregistre les photos des articles sur le
- * téléphone pour travailler hors ligne toute la journée.
+ * articles, clients et crédits pour travailler hors ligne toute la journée
+ * (les photos sont des liens : elles ne s'affichent qu'en ligne).
  */
-export async function mettreAJourCatalogue(
-  progression?: (fait: number, total: number) => void
-): Promise<{ sync: ResultatSync; images: ResultatImages | null }> {
+export async function mettreAJourCatalogue(): Promise<{ sync: ResultatSync }> {
   const sync = await synchroniser();
-  if (sync.injoignable) return { sync, images: null };
-  const articles = await lireCache("articles");
-  const images = await enregistrerImagesCatalogue(
-    articles.map((a) => a.img),
-    progression
-  );
-  await ecrire("maj-catalogue", new Date().toISOString());
-  return { sync, images };
+  if (!sync.injoignable) await ecrire("maj-catalogue", new Date().toISOString());
+  return { sync };
 }
 
 /** Synchronisation en arrière-plan, sans attendre ni signaler d'erreur. */
@@ -180,7 +175,7 @@ export function demarrerSyncAuto(): () => void {
     .then((s) => majEtat({ enLigne: s.connected }))
     .catch(() => undefined);
   lireDerniereSync().then((d) => majEtat({ derniereSync: d }));
-  void chargerImagesHorsLigne();
+  void nettoyerAnciennesImages();
 
   Network.addListener("networkStatusChange", (s) => {
     majEtat({ enLigne: s.connected });
@@ -221,6 +216,20 @@ export function useEtatSync() {
     };
   }, []);
   return { ...instantane, file };
+}
+
+/** Le téléphone est-il en ligne ? (se met à jour quand le réseau change ; léger, pour chaque photo). */
+export function useEnLigne(): boolean {
+  const [enLigne, setEnLigne] = useState(() => etat.enLigne && !etat.injoignable);
+  useEffect(() => {
+    const maj = () => setEnLigne(etat.enLigne && !etat.injoignable);
+    ecouteursEtat.add(maj);
+    maj();
+    return () => {
+      ecouteursEtat.delete(maj);
+    };
+  }, []);
+  return enLigne;
 }
 
 /** Rappelle `f` quand de nouvelles données arrivent du serveur (pour recharger un écran). */

@@ -1,0 +1,408 @@
+/* ------------------------------------------------------------------ */
+/* Vente Terrain — couche « web »                                     */
+/* Même application, mêmes composants : à partir de 768 px (tablette  */
+/* en paysage, ordinateur) la barre d'onglets devient une barre       */
+/* latérale, le contenu se centre dans une colonne lisible, les       */
+/* feuilles du bas deviennent des boîtes de dialogue et les écrans    */
+/* denses passent sur plusieurs colonnes. Rien ici ne s'applique sur  */
+/* téléphone : le mobile garde exactement sa mise en page.            */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --rc-web-max: 1160px;
+  --rc-sidenav-w: 232px;
+}
+
+/* Le menu latéral et les éléments réservés au web n'existent pas sur téléphone. */
+.rc-sidenav,
+.rc-web-only {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  /* ---------- Menu latéral (remplace la barre d'onglets du bas) ---------- */
+  ion-tab-bar {
+    display: none !important;
+  }
+
+  /* Le contenu commence après le menu (ion-tabs est positionné en absolu sur toute la fenêtre). */
+  ion-tabs {
+    inset-inline: var(--rc-sidenav-w) 0;
+    width: auto;
+  }
+
+  .rc-sidenav {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 5;
+    box-sizing: border-box;
+    width: var(--rc-sidenav-w);
+    display: flex;
+    flex-direction: column;
+    gap: var(--rc-space-3);
+    padding: var(--rc-space-4) var(--rc-space-3);
+    background: var(--rc-surface);
+    border-inline-end: 1px solid var(--rc-line);
+    overflow-y: auto;
+  }
+
+  .rc-sidenav__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-3);
+    padding: var(--rc-space-1) var(--rc-space-3) var(--rc-space-3);
+  }
+
+  .rc-sidenav__nom {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--rc-font-display);
+    font-size: 21px;
+    line-height: 1.1;
+    color: var(--rc-ink);
+  }
+
+  .rc-sidenav__liste,
+  .rc-sidenav__sous {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .rc-sidenav__liste {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rc-sidenav__entree {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-3);
+    width: 100%;
+    min-height: 46px;
+    padding: 0 var(--rc-space-3);
+    border: 0;
+    border-radius: var(--rc-radius-md);
+    background: transparent;
+    color: var(--rc-ink-2);
+    font-size: 15px;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .rc-sidenav__entree ion-icon:first-child {
+    flex: 0 0 auto;
+    font-size: 22px;
+  }
+
+  .rc-sidenav__libelle {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rc-sidenav__entree:hover {
+    background: var(--rc-press);
+    color: var(--rc-ink);
+  }
+
+  .rc-sidenav__entree--active {
+    background: var(--rc-accent-soft);
+    color: var(--rc-ink);
+    font-weight: 800;
+  }
+
+  /* Repère de l'entrée active : barre bronze au bord du menu. */
+  .rc-sidenav__entree--active::before {
+    content: "";
+    position: absolute;
+    inset-block: 10px;
+    inset-inline-start: calc(-1 * var(--rc-space-3));
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--rc-accent);
+  }
+
+  .rc-sidenav__chevron {
+    flex: 0 0 auto;
+    font-size: 16px;
+    transition: transform var(--rc-dur-base) var(--rc-ease);
+  }
+
+  .rc-sidenav__chevron--ouvert {
+    transform: rotate(180deg);
+  }
+
+  /* Sous-menu : en retrait sous son entrée, filet à gauche. */
+  .rc-sidenav__sous {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 2px 0 var(--rc-space-2);
+    margin-inline-start: calc(var(--rc-space-3) + 11px);
+    padding-inline-start: var(--rc-space-3);
+    border-inline-start: 1px solid var(--rc-line-strong);
+  }
+
+  .rc-sidenav__sous-entree {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 var(--rc-space-3);
+    border: 0;
+    border-radius: var(--rc-radius-sm);
+    background: transparent;
+    color: var(--rc-ink-2);
+    font-size: 14.5px;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .rc-sidenav__sous-entree:hover {
+    background: var(--rc-press);
+    color: var(--rc-ink);
+  }
+
+  .rc-sidenav__sous-entree--active {
+    background: var(--rc-fill);
+    color: var(--rc-ink);
+    font-weight: 800;
+  }
+
+  /* ---------- Contenu centré dans une colonne ---------- */
+  ion-content {
+    --padding-start: max(0px, calc((100% - var(--rc-web-max)) / 2));
+    --padding-end: max(0px, calc((100% - var(--rc-web-max)) / 2));
+  }
+
+  .rc-appbar,
+  .rc-actionbar {
+    padding-inline: max(var(--rc-gutter), calc((100% - var(--rc-web-max)) / 2 + var(--rc-gutter)));
+  }
+
+  .rc-fab {
+    inset-inline-end: max(var(--rc-gutter), calc((100% - var(--rc-web-max)) / 2 + var(--rc-gutter)));
+  }
+
+  .rc-actionbar > .rc-btn,
+  .rc-actionbar__row {
+    max-width: 520px;
+    margin-inline: auto;
+    width: 100%;
+  }
+
+  /* Listes pleine largeur du mobile : sur le web, des cartes dans la colonne. */
+  .rc-section--flush {
+    padding-inline: var(--rc-gutter);
+  }
+
+  .rc-section--flush .rc-section__head {
+    padding-inline: 0;
+  }
+
+  .rc-list {
+    border: 0;
+    border-radius: var(--rc-radius-md);
+    box-shadow: 0 0 0 1px var(--rc-line);
+    overflow: hidden;
+  }
+
+  /* Les feuilles (boîtes de dialogue) ne sont pas dans la colonne : elles ont leur propre largeur. */
+  ion-modal ion-content {
+    --padding-start: 0px;
+    --padding-end: 0px;
+  }
+
+  ion-modal .rc-appbar,
+  ion-modal .rc-actionbar {
+    padding-inline: var(--rc-gutter);
+  }
+
+  /* ---------- Feuilles → boîtes de dialogue centrées ---------- */
+  ion-modal.rc-sheet {
+    --width: min(640px, calc(100vw - 48px));
+    --height: min(86vh, 820px);
+    --border-radius: var(--rc-radius-lg);
+  }
+
+  ion-modal.rc-sheet--auto {
+    --height: auto;
+  }
+
+  ion-modal.rc-sheet--auto .ion-page {
+    max-height: 86vh !important;
+  }
+
+  /* ---------- Écrans en colonnes (tableau de bord, formulaires) ---------- */
+  /* Le conteneur .rc-grille range ses sections sur deux colonnes ; ce qui doit rester pleine largeur
+     (synthèse, avis, listes) porte .rc-span ou en est un des enfants connus. */
+  .rc-grille {
+    display: block;
+  }
+
+  .rc-web-only {
+    display: initial;
+  }
+}
+
+@media (min-width: 900px) {
+  .rc-grille {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--rc-space-6);
+    align-items: start;
+    padding-inline: var(--rc-gutter);
+  }
+
+  .rc-grille > .rc-section,
+  .rc-grille > .rc-summary,
+  .rc-grille > .rc-page-notice,
+  .rc-grille > .rc-media {
+    padding-inline: 0;
+  }
+
+  /* Le premier bloc après la synthèse a une marge nulle sur mobile : les deux colonnes restent alignées. */
+  .rc-grille > .rc-section,
+  .rc-grille > .rc-section:first-child,
+  .rc-grille > .rc-summary + .rc-section {
+    margin-top: var(--rc-space-5);
+  }
+
+  .rc-grille > .rc-span,
+  .rc-grille > .rc-summary,
+  .rc-grille > .rc-page-notice,
+  .rc-grille > .rc-media {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 768px) {
+  /* ---------- Rangée d'actions d'un écran (importer, trouver les photos…) : côte à côte ---------- */
+  .rc-barre-outils {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--rc-space-3);
+  }
+
+  .rc-barre-outils > .rc-btn {
+    flex: 0 0 auto;
+    width: auto;
+    margin-top: 0;
+  }
+
+  /* ---------- Souris et clavier ---------- */
+  @media (hover: hover) {
+    .rc-row:hover {
+      background: var(--rc-press);
+    }
+
+    .rc-btn:not(:disabled):hover {
+      filter: brightness(0.96);
+    }
+
+    .rc-fab:hover {
+      transform: translateY(-1px);
+    }
+  }
+
+  ion-alert {
+    --max-width: 420px;
+  }
+}
+
+@media (min-width: 1100px) {
+  :root {
+    --rc-sidenav-w: 256px;
+  }
+}
+
+/* ---------- Listes en tableau (ordinateur) ---------- */
+.rc-tableau-tete,
+.rc-tableau__cellule.rc-web-only--table {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .rc-tableau-tete {
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-4);
+    padding: 0 var(--rc-gutter) var(--rc-space-2);
+    font-size: var(--rc-text-label);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--rc-ink-2);
+  }
+
+  .rc-tableau-tete__titre {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rc-tableau-tete--vignette .rc-tableau-tete__titre {
+    padding-inline-start: calc(48px + var(--rc-space-3));
+  }
+
+  .rc-tableau-tete--chevron {
+    padding-inline-end: calc(var(--rc-gutter) + 22px);
+  }
+
+  .rc-tableau__cellule {
+    text-align: start;
+    flex: 0 0 150px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rc-tableau__dernier {
+    flex: 0 0 130px;
+    text-align: end;
+  }
+
+  .rc-tableau__cellule.rc-web-only--table {
+    display: block;
+    font-size: var(--rc-text-callout);
+    color: var(--rc-ink-2);
+  }
+
+  .rc-row--tableau .rc-row__meta {
+    display: none;
+  }
+
+  .rc-row--tableau .rc-row__trail {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--rc-space-4);
+    max-width: none;
+  }
+}
+
+/* ---------- Connexion : un panneau centré sur grand écran ---------- */
+@media (min-width: 768px) {
+  .rc-login {
+    justify-content: center;
+    padding-block: var(--rc-space-8);
+  }
+
+  .rc-login__brand {
+    flex: 0 0 auto;
+    padding-bottom: var(--rc-space-6);
+  }
+
+  .rc-login__form {
+    padding: var(--rc-space-6);
+    border-radius: var(--rc-radius-lg);
+    background: var(--rc-surface);
+    box-shadow: 0 0 0 1px var(--rc-line), var(--rc-elev-float);
+  }
+}

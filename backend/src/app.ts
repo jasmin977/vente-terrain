@@ -18,6 +18,8 @@ import { tableauDeBordRouter } from "./routes/tableauDeBord";
 import { syncRouter } from "./routes/sync";
 import { uploadsRouter, UPLOADS_DIR } from "./routes/uploads";
 import { societesRouter } from "./routes/societes";
+import { categoriesRouter } from "./routes/categories";
+import { entrepotRouter } from "./routes/entrepot";
 
 export const app = express();
 
@@ -32,6 +34,7 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 
 app.use("/api/auth", authRouter);
 app.use("/api/articles", articlesRouter);
+app.use("/api/categories", categoriesRouter);
 app.use("/api/clients", clientsRouter);
 app.use("/api/factures", facturesRouter);
 app.use("/api/stock", stockRouter);
@@ -46,6 +49,7 @@ app.use("/api/tableau-de-bord", tableauDeBordRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/societes", societesRouter);
+app.use("/api/entrepot", entrepotRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

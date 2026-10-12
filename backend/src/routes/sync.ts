@@ -18,7 +18,10 @@ syncRouter.get("/pull", async (req, res) => {
   const serverTime = new Date();
 
   const [articles, clients, factures, retours, paiements, stockCamion, visites] = await Promise.all([
-    prisma.article.findMany({ where: { updatedAt: { gt: since }, societeId: req.societeId } }),
+    prisma.article.findMany({
+      where: { updatedAt: { gt: since }, societeId: req.societeId },
+      include: { codesBarres: { select: { id: true, codeBarre: true, libelle: true } } },
+    }),
     prisma.client.findMany({ where: { updatedAt: { gt: since }, societeId: req.societeId } }),
     prisma.facture.findMany({
       where: { updatedAt: { gt: since }, vendeurId },

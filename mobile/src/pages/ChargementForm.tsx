@@ -11,7 +11,9 @@ import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import ArticleImage from "../components/ArticleImage";
 import ArticlePickerModal from "./ArticlePickerModal";
-import { formatColis, pieces, joinMeta } from "../utils/format";
+import ChampDateExpiration from "../components/ChampDateExpiration";
+import FlecheVariation from "../components/FlecheVariation";
+import { formatAmount, formatColis, pieces, joinMeta } from "../utils/format";
 import {
   ActionBar,
   AppHeader,
@@ -19,12 +21,17 @@ import {
   Field,
   Group,
   LineItem,
+  Money,
+  Row,
   PageNotice,
   PickerField,
   PickerSheet,
   Section,
   Stepper,
 } from "../ui";
+import { suiviPeremption } from "../utils/peremption";
+import { arrondir, htDepuisMarge, htDepuisTTC, margeDepuis, ttcDepuisHT } from "../utils/tarifs";
+import { useCategories } from "../utils/useCategories";
 import { t } from "../i18n";
 
 /** Quantité saisie en colis + pièces (ex. 30 colis + 3 pièces). */
@@ -32,6 +39,14 @@ interface Line {
   articleId: string;
   colis: number;
   pieces: number;
+  /** Bon d'entrée : date d'expiration des pièces reçues (AAAA-MM-JJ), facultative. */
+  date?: string;
+  /** Bon d'entrée : prix d'achat HT facturé (texte saisi) ; vide = prix actuel de l'article. */
+  achat?: string;
+  /** Bon d'entrée : prix de vente TTC modifié à la main (sinon le prix actuel est gardé). */
+  ttc?: string;
+  /** Bon d'entrée : marge (% du prix d'achat) saisie à la main ; elle fixe le prix de vente. */
+  marge?: string;
 }
 
 type Kind = "chargement" | "retour" | "entree";
@@ -57,6 +72,7 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
   const entree = kind === "entree";
   const sens = kind === "retour" ? "RETOUR" : "CHARGEMENT";
   const bon = BONS[kind];
+  const { categories } = useCategories();
 
   const [vendeurs, setVendeurs] = useState<UserSummary[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -126,11 +142,56 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
 
   const updateLine = (articleId: string, champ: "colis" | "pieces", valeur: number) =>
     setLignes((ls) => ls.map((l) => (l.articleId === articleId ? { ...l, [champ]: Math.max(0, Math.trunc(valeur) || 0) } : l)));
+  const updateLigne = (articleId: string, champs: Partial<Line>) =>
+    setLignes((ls) => ls.map((l) => (l.articleId === articleId ? { ...l, ...champs } : l)));
+  const updateDate = (articleId: string, date: string) => setLignes((ls) => ls.map((l) => (l.articleId === articleId ? { ...l, date } : l)));
   const removeLine = (articleId: string) => setLignes((ls) => ls.filter((l) => l.articleId !== articleId));
 
   const sortDuDepot = !entree && sens === "CHARGEMENT";
   const manqueDepot = (l: Line) => sortDuDepot && enUnites(l) > (depot.get(l.articleId) ?? 0);
   const totalUnites = lignes.reduce((s, l) => s + enUnites(l), 0);
+
+  const nombre = (texte: string | undefined) => (texte === undefined || texte.trim() === "" ? undefined : Number(texte.replace(",", ".")));
+  /**
+   * Prix d'une ligne de bon d'entrée. Un nouveau prix d'achat ne change JAMAIS le prix de vente tout seul :
+   * le prix de vente actuel reste, la marge se recalcule, et l'admin choisit : revenir à l'ancienne marge
+   * (suggestion), saisir un autre prix de vente TTC, ou saisir sa marge.
+   */
+  const prixLigne = (l: Line) => {
+    const a = articleMap.get(l.articleId);
+    if (!entree || !a) return null;
+    const achatActuel = Number(a.prixAchat ?? 0);
+    const tva = Number(a.tva);
+    const fodec = Number(a.fodec ?? 0);
+    const venteActuelle = Number(a.prixVente);
+    const achat = nombre(l.achat) ?? achatActuel;
+    const change = Math.abs(achat - achatActuel) > 1e-9;
+    const ttcActuel = ttcDepuisHT(venteActuelle, tva, fodec);
+    const margeActuelle = margeDepuis(venteActuelle, achatActuel);
+    const ttcSaisi = change ? nombre(l.ttc) : undefined;
+    const ttc = ttcSaisi ?? ttcActuel;
+    const ht = ttcSaisi === undefined ? venteActuelle : htDepuisTTC(ttcSaisi, tva, fodec);
+    const ttcAncienneMarge =
+      change && margeActuelle !== undefined ? ttcDepuisHT(htDepuisMarge(achat, margeActuelle, tva, fodec), tva, fodec) : undefined;
+    const quantite = enUnites(l);
+    return {
+      achatActuel,
+      achat,
+      change,
+      ecart: arrondir(achat - achatActuel, 3),
+      margeActuelle,
+      marge: margeDepuis(ht, achat),
+      ttcActuel,
+      ttc,
+      ht,
+      ttcAncienneMarge,
+      total: arrondir(quantite * achat, 3),
+      totalTTC: arrondir(quantite * ttcDepuisHT(achat, tva, fodec), 3),
+      invalide: !(achat >= 0) || !(ttc >= 0),
+    };
+  };
+  const totalHT = entree ? arrondir(lignes.reduce((s, l) => s + (prixLigne(l)?.total ?? 0), 0), 3) : 0;
+  const totalTTC = entree ? arrondir(lignes.reduce((s, l) => s + (prixLigne(l)?.totalTTC ?? 0), 0), 3) : 0;
 
   const missing =
     !entree && !vendeurId
@@ -141,6 +202,8 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
       ? t("Ajoutez au moins un article")
       : lignes.some((l) => !(enUnites(l) > 0))
       ? t("Vérifiez les quantités")
+      : lignes.some((l) => prixLigne(l)?.invalide)
+      ? t("Vérifiez les prix")
       : lignes.some(manqueDepot)
       ? t("Stock dépôt insuffisant pour un article")
       : null;
@@ -155,6 +218,10 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
         articleId: l.articleId,
         quantite: enUnites(l),
         unite: "UNITE" as const,
+        ...(entree && l.date ? { dateExpiration: l.date } : {}),
+        ...(entree && prixLigne(l)?.change
+          ? { prixAchat: arrondir(prixLigne(l)!.achat, 6), prixVente: prixLigne(l)!.ht }
+          : {}),
       }));
       const ref = reference.trim() || undefined;
       if (entree) await createEntreeDepot({ reference: ref, lignes: payload });
@@ -258,6 +325,7 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
                     removeLabel={t("Retirer {nom}", { nom: name })}
                     onRemove={() => removeLine(l.articleId)}
                     control={
+                      <div className="rc-line__ctl">
                       <div className="rc-qtysplit">
                         {c > 1 && (
                           <div className="rc-qtysplit__item">
@@ -290,10 +358,32 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
                           />
                         </div>
                       </div>
+                      {entree && prixLigne(l) && (
+                        <PrixLigne
+                          prix={prixLigne(l)!}
+                          achat={l.achat}
+                          ttc={l.ttc}
+                          marge={l.marge}
+                          tva={Number(article?.tva ?? 0)}
+                          fodec={Number(article?.fodec ?? 0)}
+                          onChange={(champs) => updateLigne(l.articleId, champs)}
+                        />
+                      )}
+                      {entree && suiviPeremption(categories, article?.categorieId) && (
+                        <ChampDateExpiration
+                          label={t("Date d'expiration (facultatif)")}
+                          value={l.date ?? ""}
+                          onChange={(v) => updateDate(l.articleId, v)}
+                        />
+                      )}
+                      </div>
                     }
                     amount={
-                      <span className="rc-qty">
-                        = <span className="rc-qty__n">{u}</span> {pieces(u)}
+                      <span className="rc-line__totaux">
+                        <span className="rc-qty">
+                          = <span className="rc-qty__n">{u}</span> {pieces(u)}
+                        </span>
+                        {entree && prixLigne(l) && <Money value={prixLigne(l)!.total} size="lg" />}
                       </span>
                     }
                   />
@@ -313,6 +403,16 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
             {lignes.length > 0 ? t("Ajouter ou retirer des articles") : t("Choisir des articles")}
           </Button>
         </Section>
+
+        {entree && lignes.length > 0 && (
+          <Section label={t("Total du bon")}>
+            <Group>
+              <Row compact label={t("Total HT")} trailing={<Money value={totalHT} />} />
+              <Row compact label={t("TVA et FODEC")} trailing={<Money value={arrondir(totalTTC - totalHT, 3)} />} />
+              <Row compact label={t("Total TTC")} trailing={<Money value={totalTTC} size="lg" />} />
+            </Group>
+          </Section>
+        )}
       </IonContent>
 
       <ActionBar hint={missing}>
@@ -352,5 +452,109 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
         }))}
       />
     </IonPage>
+  );
+}
+
+type PrixDeLigne = {
+  achatActuel: number;
+  achat: number;
+  change: boolean;
+  ecart: number;
+  margeActuelle: number | undefined;
+  marge: number | undefined;
+  ttcActuel: number;
+  ttc: number;
+  ttcAncienneMarge: number | undefined;
+};
+
+/**
+ * Prix d'une ligne de bon d'entrée : prix d'achat (flèche rouge/verte et écart quand il change), marge à droite,
+ * prix de vente TTC (grisé tant que le prix d'achat est inchangé) et suggestion de revenir à l'ancienne marge.
+ */
+function PrixLigne({
+  prix,
+  achat,
+  ttc,
+  marge,
+  tva,
+  fodec,
+  onChange,
+}: {
+  prix: PrixDeLigne;
+  achat: string | undefined;
+  ttc: string | undefined;
+  marge: string | undefined;
+  tva: number;
+  fodec: number;
+  onChange: (champs: Partial<Line>) => void;
+}) {
+  const hausse = prix.ecart > 0;
+  const signe = hausse ? "+" : "−";
+  const margeAffichee = marge ?? (prix.marge === undefined ? "" : String(prix.marge));
+  return (
+    <div className="rc-prixligne">
+      <div className="rc-fields__row">
+        <div className="rc-prixligne__achat">
+          {prix.change && (
+            <span className="rc-prixligne__fleche">
+              <FlecheVariation sens={hausse ? "hausse" : "baisse"} label={hausse ? t("Prix d'achat en hausse") : t("Prix d'achat en baisse")} />
+            </span>
+          )}
+          <Field
+            label={t("Prix d'achat HT")}
+            type="number"
+            inputMode="decimal"
+            value={achat ?? String(prix.achatActuel)}
+            // Un autre prix d'achat : le prix de vente revient au prix actuel (jamais modifié tout seul).
+            onChange={(v) => onChange({ achat: v, ttc: undefined, marge: undefined })}
+            suffix="TND"
+            hint={
+              prix.change ? (
+                <span className={`rc-variation-texte rc-variation-texte--${hausse ? "hausse" : "baisse"}`}>
+                  {signe}
+                  {formatAmount(Math.abs(prix.ecart))} {t("TND")} {t("par rapport à {p}", { p: formatAmount(prix.achatActuel) })}
+                </span>
+              ) : undefined
+            }
+          />
+        </div>
+        <Field
+          label={t("Marge")}
+          type="number"
+          inputMode="decimal"
+          value={margeAffichee}
+          disabled={!prix.change}
+          onChange={(v) => {
+            const m = Number(v.replace(",", "."));
+            onChange(
+              v.trim() !== "" && Number.isFinite(m)
+                ? { marge: v, ttc: String(ttcDepuisHT(htDepuisMarge(prix.achat, m, tva, fodec), tva, fodec)) }
+                : { marge: v },
+            );
+          }}
+          suffix="%"
+          hint={prix.change && prix.margeActuelle !== undefined ? t("Avant : {n} %", { n: prix.margeActuelle }) : t("Sur le prix d'achat")}
+        />
+      </div>
+      <Field
+        label={t("Prix de vente TTC")}
+        type="number"
+        inputMode="decimal"
+        value={ttc ?? String(prix.ttc)}
+        disabled={!prix.change}
+        onChange={(v) => onChange({ ttc: v, marge: undefined })}
+        suffix="TND"
+        hint={prix.change ? undefined : t("Modifiable quand le prix d'achat change")}
+      />
+      {prix.change && prix.ttcAncienneMarge !== undefined && Math.abs(prix.ttcAncienneMarge - prix.ttc) > 0.0005 && (
+        <Button
+          variant="secondary"
+          block
+          onClick={() => onChange({ ttc: String(prix.ttcAncienneMarge), marge: undefined })}
+        >
+          {t("Garder l'ancienne marge ({n} %) : {p} TND", { n: prix.margeActuelle ?? 0, p: formatAmount(prix.ttcAncienneMarge) })}
+        </Button>
+      )}
+    </div>
   );
 }

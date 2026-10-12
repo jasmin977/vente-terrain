@@ -24,6 +24,8 @@ export interface StockCamionItem {
 export interface StockDepotItem {
   articleId: string;
   quantite: number;
+  /** Jamais eu de stock et pas encore confirmé « sans stock » (écran « À compléter »). */
+  aConfirmer: boolean;
   article: Article;
 }
 
@@ -68,7 +70,13 @@ export interface ChargementInput {
 
 export interface EntreeDepotInput {
   reference?: string;
-  lignes: LigneQuantiteInput[];
+  /** dateExpiration (AAAA-MM-JJ) : date des pièces reçues, si elle est connue. */
+  lignes: (LigneQuantiteInput & {
+    dateExpiration?: string;
+    /** Nouveau prix d'achat HT (fournisseur) et prix de vente HT qui en découle. */
+    prixAchat?: number;
+    prixVente?: number;
+  })[];
 }
 
 /** Possibilité de supprimer un document (et pourquoi pas). */

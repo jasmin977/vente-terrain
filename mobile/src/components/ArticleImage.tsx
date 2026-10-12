@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { imageAffichee, useImagesHorsLigne } from "../offline/images";
+import { imageAffichee } from "../offline/images";
+import { useEnLigne } from "../offline/sync";
 
 interface ArticleImageProps {
   src?: string | null;
@@ -7,30 +8,28 @@ interface ArticleImageProps {
   size?: number;
 }
 
-// Article sans photo, ou photo introuvable (hors ligne et pas encore enregistrée).
-const IMAGE_PAR_DEFAUT = "/articles/default.svg";
-
 /**
- * Photo d'un article : copie enregistrée sur le téléphone si elle existe
- * (catalogue mis à jour le matin), sinon la photo du serveur.
+ * Photo d'un article : le lien enregistré sur la fiche, affiché seulement en ligne.
+ * Article sans photo, lien cassé ou téléphone hors ligne : rien n'est affiché — la
+ * ligne reste compacte, sans image générique répétée sur tout un catalogue.
  */
 export default function ArticleImage({ src, alt, size = 48 }: ArticleImageProps) {
-  useImagesHorsLigne();
-  const affichee = imageAffichee(src);
+  const enLigne = useEnLigne();
+  const affichee = enLigne ? imageAffichee(src) : null;
   const [echec, setEchec] = useState<string | null>(null);
-  const url = !affichee || echec === affichee ? IMAGE_PAR_DEFAUT : affichee;
+  if (!affichee || echec === affichee) return null;
 
   return (
     <img
       className="rc-thumb"
-      src={url}
+      src={affichee}
       alt={alt}
       width={size}
       height={size}
       loading="lazy"
       decoding="async"
       style={{ width: size, height: size }}
-      onError={() => affichee && setEchec(affichee)}
+      onError={() => setEchec(affichee)}
     />
   );
 }

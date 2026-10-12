@@ -4,6 +4,8 @@ import { IonContent, IonPage, IonRefresher, IonRefresherContent, RefresherEventD
 import {
   addOutline,
   cloudUploadOutline,
+  imageOutline,
+  folderOpenOutline,
   carOutline,
   chevronBackOutline,
   chevronForwardOutline,
@@ -33,15 +35,25 @@ import type {
 import type { UserSummary } from "../types/auth";
 import { useAuth } from "../auth/AuthContext";
 import ArticleImage from "../components/ArticleImage";
+import { prixTTC } from "../utils/tarifs";
+import TriArticlesButton from "../components/TriArticlesButton";
+import { CRITERES_STOCK, trierArticles, trierStock, useTriArticles } from "../utils/triArticles";
 import { ApiError } from "../api/client";
 import { formatColis, formatDateTime, pieces, joinMeta } from "../utils/format";
 import { articleCorrespond, articleParCode } from "../utils/articleSearch";
+import FiltreCategorie from "../components/FiltreCategorie";
+import { filtrerParCategorie } from "../utils/categories";
+import { useCategories } from "../utils/useCategories";
 import DepotDashboard from "./DepotDashboard";
 import ImportArticlesSheet from "../components/ImportArticlesSheet";
+import TrouverPhotosSheet from "../components/TrouverPhotosSheet";
+import { useVueUrl } from "../utils/useVueUrl";
 import {
   AccountButton,
   AppHeader,
   Button,
+  CellulesTableau,
+  EnteteTableau,
   EmptyState,
   Fab,
   FabSpacer,
@@ -56,6 +68,11 @@ import {
   Segmented,
   SkeletonList,
   Tag,
+  ChargerPlus,
+  useListeProgressive,
+  BoutonHaut,
+  useRetourEnHaut,
+  useEcranLarge,
 } from "../ui";
 import { getLocale, t, tn } from "../i18n";
 
@@ -106,6 +123,12 @@ export default function Stock() {
   const isAdmin = user?.role === "ADMIN";
 
   const [lieu, setLieu] = useState<Lieu>("depot");
+  // Web : Dépôt / Camion / Articles se choisissent dans le menu latéral (?lieu=…), pas par onglets.
+  const web = useEcranLarge();
+  useVueUrl("/stock", "lieu", ["depot", "camion", "articles"] as const, (v) => {
+    setLieu(v);
+    setQuery("");
+  });
   const [vueDepot, setVueDepot] = useState<VueDepot>("stock");
   const [vueCamion, setVueCamion] = useState<VueCamion>("stock");
   /** Chargements et mouvements du camion : 0 = mois en cours, -1 = mois précédent… */
@@ -122,6 +145,7 @@ export default function Stock() {
   const [sorties, setSorties] = useState<ChargementResume[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [importOuvert, setImportOuvert] = useState(false);
+  const [photosOuvert, setPhotosOuvert] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -184,9 +208,30 @@ export default function Stock() {
   };
 
   const q = query.trim();
-  const depotFiltre = useMemo(() => depot.filter((d) => articleCorrespond(d.article, q)), [depot, q]);
-  const stockFiltre = useMemo(() => stock.filter((s) => articleCorrespond(s.article, q)), [stock, q]);
-  const articlesFiltres = useMemo(() => articles.filter((a) => articleCorrespond(a, q)), [articles, q]);
+  const [triDepot, setTriDepot] = useTriArticles("depot");
+  const [triCamion, setTriCamion] = useTriArticles("camion");
+  const haut = useRetourEnHaut();
+  // Filtre par catégorie, commun aux listes d'articles de l'écran.
+  const { categories, recharger: rechargerCategories } = useCategories();
+  const [categorie, setCategorie] = useState<string | undefined>(undefined);
+  const depotFiltre = useMemo(
+    () => trierStock(filtrerParCategorie(depot.filter((d) => articleCorrespond(d.article, q)), categories, categorie, (d) => d.article), triDepot),
+    [depot, q, categories, categorie, triDepot]
+  );
+  const stockFiltre = useMemo(
+    () => trierStock(filtrerParCategorie(stock.filter((s) => articleCorrespond(s.article, q)), categories, categorie, (s) => s.article), triCamion),
+    [stock, q, categories, categorie, triCamion]
+  );
+  const [triArticles, setTriArticles] = useTriArticles();
+  const articlesFiltres = useMemo(
+    () => trierArticles(filtrerParCategorie(articles.filter((a) => articleCorrespond(a, q)), categories, categorie, (a) => a), triArticles),
+    [articles, q, categories, categorie, triArticles]
+  );
+
+  // Longues listes (plus d'un millier d'articles) : affichage progressif.
+  const listeArticles = useListeProgressive(articlesFiltres, `${q}|${categorie}|${triArticles.cle}|${triArticles.inverse}`);
+  const listeDepot = useListeProgressive(depotFiltre, `${q}|${categorie}|${triDepot.cle}|${triDepot.inverse}`);
+  const listeCamion = useListeProgressive(stockFiltre, `${q}|${categorie}|${vendeurId}|${triCamion.cle}|${triCamion.inverse}`);
 
   if (!isAdmin) return <Navigate to="/factures" replace />;
 
@@ -205,12 +250,28 @@ export default function Stock() {
 
   const contenuArticles = () => (
     <>
-    <Section>
+    <Section className="rc-barre-outils">
       <Button variant="secondary" block icon={cloudUploadOutline} onClick={() => setImportOuvert(true)}>
         {t("Importer depuis Excel")}
       </Button>
+      <Button variant="ghost" block icon={imageOutline} onClick={() => setPhotosOuvert(true)}>
+        {t("Trouver les photos en ligne")}
+      </Button>
+      <Button variant="ghost" block icon={folderOpenOutline} onClick={() => navigate("/stock/categories")}>
+        {t("Gérer les catégories")}
+      </Button>
     </Section>
-    <Section flush aside={articles.length > 0 ? tn(articles.length, "{n} article", "{n} articles") : undefined}>
+    <Section
+      flush
+      aside={
+        articles.length > 0 ? (
+          <span className="rc-liste-tete">
+            <span>{tn(articlesFiltres.length, "{n} article", "{n} articles")}</span>
+            <TriArticlesButton value={triArticles} onChange={setTriArticles} />
+          </span>
+        ) : undefined
+      }
+    >
       {articlesFiltres.length === 0 ? (
         <EmptyState
           icon={cubeOutline}
@@ -218,20 +279,25 @@ export default function Stock() {
           message={q ? t("Essayez une autre désignation, un code ou un code-barres.") : undefined}
         />
       ) : (
+        <>
+        <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Prix TTC")} vignette chevron />
         <div className="rc-list">
-          {articlesFiltres.map((a) => (
+          {listeArticles.visibles.map((a) => (
             <Row
               key={a.id}
+              className="rc-row--tableau"
               thumb
               chevron
               onClick={() => navigate(`/articles/${a.id}`)}
               leading={<ArticleImage src={a.img} alt="" />}
               title={a.designation}
               meta={joinMeta([a.code, a.unit, a.marque])}
-              trailing={<Money value={a.prixVente} />}
+              trailing={<CellulesTableau valeurs={[a.marque, a.unit, a.codeBarre]} dernier={<Money value={prixTTC(a)} />} />}
             />
           ))}
+          <ChargerPlus reste={listeArticles.reste} onPlus={listeArticles.plus} />
         </div>
+        </>
       )}
     </Section>
     </>
@@ -312,31 +378,52 @@ export default function Stock() {
     return (
       <>
         {/* Tableau de bord masqué pendant une recherche : les résultats d'abord. */}
-        {!q && depot.length > 0 && <DepotDashboard depot={depot} ventes={ventes} />}
+        {!q && depot.length > 0 && <DepotDashboard depot={depot} ventes={ventes} avecCategories={categories.length > 0} />}
         <Section
           flush
-          label={q ? undefined : t("Articles")}
-          aside={t("{articles} · {q} au dépôt", {
-            articles: tn(depot.length, "{n} article", "{n} articles"),
-            q: `${total} ${pieces(total)}`,
-          })}
+          aside={
+            <span className="rc-liste-tete">
+              {/* Titre « Articles » (masqué pendant une recherche), totaux en dessous. */}
+              <span className="rc-liste-tete__titre">
+                {!q && <span className="rc-section__label">{t("Articles")}</span>}
+                <span>
+                  {t("{articles} · {q} au dépôt", {
+                    articles: tn(depot.length, "{n} article", "{n} articles"),
+                    q: `${total} ${pieces(total)}`,
+                  })}
+                </span>
+              </span>
+              {depot.length > 0 && <TriArticlesButton value={triDepot} onChange={setTriDepot} criteres={CRITERES_STOCK} />}
+            </span>
+          }
         >
           {depotFiltre.length === 0 ? (
             <EmptyState icon={cubeOutline} title={t("Aucun article.")} message={q ? t("Essayez une autre recherche.") : undefined} />
           ) : (
+            <>
+            <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Stock")} vignette />
             <div className="rc-list">
-              {depotFiltre.map((d) => (
+              {listeDepot.visibles.map((d) => (
                 <Row
                   key={d.articleId}
+                  className="rc-row--tableau"
                   thumb
+                  onClick={() => navigate(`/articles/${d.articleId}`)}
                   muted={d.quantite === 0}
                   leading={<ArticleImage src={d.article.img} alt="" />}
                   title={d.article.designation}
                   meta={joinMeta([d.article.code, d.article.unit])}
-                  trailing={<Quantity value={d.quantite} colisage={Number(d.article.colisage)} />}
+                  trailing={
+                    <CellulesTableau
+                      valeurs={[d.article.marque, d.article.unit, d.article.codeBarre]}
+                      dernier={<Quantity value={d.quantite} colisage={Number(d.article.colisage)} />}
+                    />
+                  }
                 />
               ))}
+              <ChargerPlus reste={listeDepot.reste} onPlus={listeDepot.plus} />
             </div>
+            </>
           )}
         </Section>
       </>
@@ -391,12 +478,17 @@ export default function Stock() {
       <Section
         flush
         aside={
-          stock.length > 0
-            ? t("{articles} · {q} (théorique)", {
-                articles: tn(stock.length, "{n} article", "{n} articles"),
-                q: `${total} ${pieces(total)}`,
-              })
-            : undefined
+          stock.length > 0 ? (
+            <span className="rc-liste-tete">
+              <span>
+                {t("{articles} · {q} (théorique)", {
+                  articles: tn(stock.length, "{n} article", "{n} articles"),
+                  q: `${total} ${pieces(total)}`,
+                })}
+              </span>
+              <TriArticlesButton value={triCamion} onChange={setTriCamion} criteres={CRITERES_STOCK} />
+            </span>
+          ) : undefined
         }
       >
         {stockFiltre.length === 0 ? (
@@ -407,12 +499,13 @@ export default function Stock() {
           />
         ) : (
           <div className="rc-list">
-            {stockFiltre.map((item) => {
+            {listeCamion.visibles.map((item) => {
               const qte = Number(item.quantite);
               return (
                 <Row
                   key={item.id}
                   thumb
+                  onClick={() => navigate(`/stock/camion/${vendeurId}/articles/${item.articleId}`)}
                   muted={qte === 0}
                   leading={<ArticleImage src={item.article.img} alt="" />}
                   title={item.article.designation}
@@ -421,6 +514,7 @@ export default function Stock() {
                 />
               );
             })}
+            <ChargerPlus reste={listeCamion.reste} onPlus={listeCamion.plus} />
           </div>
         )}
       </Section>
@@ -429,20 +523,27 @@ export default function Stock() {
 
   return (
     <IonPage>
-      <AppHeader large title={t("Stock")} actions={<AccountButton />}>
-        <Segmented
-          label={t("Lieu de stock")}
-          value={lieu}
-          onChange={(v) => {
-            setLieu(v);
-            setQuery("");
-          }}
-          options={[
-            { value: "depot", label: t("Dépôt") },
-            { value: "camion", label: t("Camion") },
-            { value: "articles", label: t("Articles") },
-          ]}
-        />
+      <AppHeader
+        large
+        eyebrow={web && lieu !== "articles" ? t("Stock") : undefined}
+        title={web ? (lieu === "depot" ? t("Dépôt") : lieu === "camion" ? t("Camion") : t("Articles")) : t("Stock")}
+        actions={<AccountButton />}
+      >
+        {!web && (
+          <Segmented
+            label={t("Lieu de stock")}
+            value={lieu}
+            onChange={(v) => {
+              setLieu(v);
+              setQuery("");
+            }}
+            options={[
+              { value: "depot", label: t("Dépôt") },
+              { value: "camion", label: t("Camion") },
+              { value: "articles", label: t("Articles") },
+            ]}
+          />
+        )}
         {lieu === "camion" && (
           <div>
             <FilterChip
@@ -453,10 +554,11 @@ export default function Stock() {
             />
           </div>
         )}
-        {vueProduits && <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, code…")} />}
+        {vueProduits && <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />}
+        {vueProduits && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
       </AppHeader>
 
-      <IonContent>
+      <IonContent {...haut.contenu}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
@@ -480,8 +582,7 @@ export default function Stock() {
                 label={t("Affichage du dépôt")}
                 value={vueDepot}
                 onChange={setVueDepot}
-                wrap
-                columns={2}
+                variant="onglets"
                 options={[
                   { value: "stock", label: t("Stock") },
                   { value: "entrees", label: t("B° Entrée") },
@@ -494,6 +595,7 @@ export default function Stock() {
                 label={t("Affichage du camion")}
                 value={vueCamion}
                 onChange={setVueCamion}
+                variant="onglets"
                 options={[
                   { value: "stock", label: t("Stock") },
                   { value: "chargements", label: t("Chargements") },
@@ -569,9 +671,23 @@ export default function Stock() {
         ) : (
           <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId } })} />
         )}
+        <BoutonHaut visible={haut.visible} onClick={haut.remonter} />
       </IonContent>
 
-      <ImportArticlesSheet isOpen={importOuvert} onDismiss={() => setImportOuvert(false)} onImporte={fetchData} />
+      <ImportArticlesSheet
+        isOpen={importOuvert}
+        onDismiss={() => setImportOuvert(false)}
+        onImporte={() => {
+          fetchData();
+          rechargerCategories();
+        }}
+        onClasser={() => {
+          setImportOuvert(false);
+          navigate("/stock/a-completer?vue=categorie");
+        }}
+      />
+
+      <TrouverPhotosSheet isOpen={photosOuvert} onDismiss={() => setPhotosOuvert(false)} onFait={fetchData} />
 
       <PickerSheet
         isOpen={vendeurSheet}

@@ -26,5 +26,17 @@ export interface SocieteInput {
 export interface ResultatImport {
   crees: number;
   misAJour: number;
+  /** Articles dont le stock du fichier a été versé au dépôt (bon « Stock initial »). */
+  stockInitial: number;
+  /** Articles dont le stock du fichier a été ignoré : ils ont déjà eu du stock. */
+  stockIgnore: number;
+  /** Articles dont le stock du fichier est négatif : ignoré. */
+  stockNegatif: number;
+  /** Fichier « classement seul » : articles classés (sans autre modification). */
+  classes?: number;
+  /** Catégories et sous-catégories créées par le fichier. */
+  categoriesCreees: number;
+  /** Articles encore à classer (0 pour une société sans catégorie). */
+  sansCategorie: number;
   erreurs: { ligne: number; raison: string }[];
 }

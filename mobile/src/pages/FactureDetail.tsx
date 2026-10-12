@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { IonAlert, IonContent, IonPage } from "@ionic/react";
 import { closeCircleOutline, printOutline } from "ionicons/icons";
+import { Capacitor } from "@capacitor/core";
 import { annulerFacture } from "../api/factures";
 import { getFacture } from "../offline/donnees";
 import type { Facture } from "../types/facture";
@@ -281,9 +282,16 @@ export default function FactureDetail() {
 
       {facture && (
         <ActionBar>
-          <Button variant={annulee ? "secondary" : "primary"} size="lg" block icon={printOutline} loading={printing} onClick={handlePrint}>
-            {t("Imprimer le ticket")}
-          </Button>
+          {/* Web : pas de ticket thermique direct, le bon s'imprime avec le navigateur (A4). */}
+          {Capacitor.isNativePlatform() ? (
+            <Button variant={annulee ? "secondary" : "primary"} size="lg" block icon={printOutline} loading={printing} onClick={handlePrint}>
+              {t("Imprimer le ticket")}
+            </Button>
+          ) : (
+            <Button variant={annulee ? "secondary" : "primary"} size="lg" block icon={printOutline} loading={impressionA4} onClick={imprimerA4}>
+              {t("Imprimer le bon")}
+            </Button>
+          )}
         </ActionBar>
       )}
     </IonPage>

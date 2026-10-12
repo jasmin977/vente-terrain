@@ -1,11 +1,28 @@
-// Mot de passe lisible à transmettre au vendeur (sans caractères ambigus :
-// pas de 0/O, 1/l/I).
-const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+// Mots de repli quand le prénom ne s'écrit pas en lettres latines (ou est vide).
+const MOTS = ["jasmin", "olive", "soleil", "palmier", "sahara", "atlas", "medina", "corail", "cedre", "etoile"];
 
-export function genererMotDePasse(longueur = 8): string {
-  const octets = new Uint8Array(longueur);
-  crypto.getRandomValues(octets);
-  return Array.from(octets, (o) => ALPHABET[o % ALPHABET.length]).join("");
+function hasard(max: number): number {
+  const n = new Uint32Array(1);
+  crypto.getRandomValues(n);
+  return n[0] % max;
+}
+
+/**
+ * Mot de passe facile à retenir et à taper sur un téléphone : le prénom du
+ * vendeur en minuscules suivi de 4 chiffres au hasard (« karim4827 »). Les
+ * chiffres restent aléatoires : un mot de passe tiré seulement du nom, du
+ * téléphone ou du matricule se devinerait.
+ */
+export function genererMotDePasse(nom = ""): string {
+  const prenom = (nom.trim().split(/\s+/)[0] ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "") // accents (é → e)
+    .toLowerCase()
+    .replace(/[^a-z]/g, "")
+    .slice(0, 10);
+  const mot = prenom.length >= 3 ? prenom : MOTS[hasard(MOTS.length)];
+  const chiffres = String(hasard(10000)).padStart(4, "0");
+  return `${mot}${chiffres}`;
 }
 
 /** Prochain code vendeur libre au format V001, V002… */

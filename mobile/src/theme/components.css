@@ -582,6 +582,62 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* Onglets soulignés : les vues d'un même écran (Stock · B° Entrée · B° Sortie…) sur une seule ligne, sans cadre. */
+.rc-seg--onglets {
+  display: flex;
+  gap: var(--rc-space-1);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--rc-line-strong);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rc-seg--onglets::-webkit-scrollbar {
+  display: none;
+}
+
+.rc-seg--onglets .rc-seg__opt {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding: 0 var(--rc-space-4);
+  border-radius: var(--rc-radius-sm) var(--rc-radius-sm) 0 0;
+  white-space: nowrap;
+}
+
+.rc-seg--onglets .rc-seg__opt[aria-checked="true"] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--rc-ink);
+  font-weight: 800;
+}
+
+/* Trait bronze sous l'onglet choisi. */
+.rc-seg--onglets .rc-seg__opt[aria-checked="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--rc-space-3);
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--rc-accent);
+}
+
+@media (hover: hover) {
+  .rc-seg--onglets .rc-seg__opt:hover {
+    background: var(--rc-press);
+    color: var(--rc-ink);
+  }
+}
+
+@media (max-width: 420px) {
+  .rc-seg--onglets .rc-seg__opt {
+    padding-inline: var(--rc-space-3);
+  }
+}
+
 /* Small phones (≤ 374px): four tiles would squeeze "Virement"; go 2×2. */
 @media (max-width: 374px) {
   .rc-seg--wrap:not(.rc-seg--cols-3) {
@@ -696,6 +752,46 @@
   box-shadow: inset 0 0 0 1.5px var(--rc-accent);
 }
 
+.rc-chip--sm {
+  min-height: 34px;
+  gap: 4px;
+  padding-inline: var(--rc-space-3);
+  font-size: var(--rc-text-meta);
+}
+
+/* Option de choix précédée d'une icône (sens du tri). */
+.rc-seg__avec-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rc-seg__avec-icone ion-icon {
+  font-size: 18px;
+  flex: none;
+}
+
+/* En-tête de liste : nombre d'éléments à gauche, tri à droite. */
+.rc-section__aside:has(> .rc-liste-tete) {
+  flex: 1;
+}
+
+.rc-liste-tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+/* Titre de la liste avec ses totaux en dessous. */
+.rc-liste-tete__titre {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 /* ================= Section / group ================= */
 .rc-section {
   padding: 0 var(--rc-gutter);
@@ -800,6 +896,37 @@
 
 .rc-group .rc-row--with-thumb {
   --rc-row-inset: calc(var(--rc-space-4) + 48px + var(--rc-space-3));
+}
+
+/* Article sans photo : pas d'emplacement vide, le texte et le séparateur
+   repartent du bord. */
+.rc-row__lead:empty {
+  display: none;
+}
+
+.rc-row--with-thumb:has(> .rc-row__lead:empty) {
+  --rc-row-inset: initial;
+}
+
+/* Sous-catégorie : en retrait sous sa catégorie (le trait séparateur suit le retrait). */
+.rc-row--niveau2 {
+  padding-inline-start: calc(var(--rc-gutter) + 22px);
+  --rc-row-inset: calc(var(--rc-gutter) + 22px);
+}
+
+.rc-group .rc-row--niveau2 {
+  padding-inline-start: calc(var(--rc-space-4) + 22px);
+  --rc-row-inset: calc(var(--rc-space-4) + 22px);
+}
+
+/* Intitulé de groupe dans une liste de choix (catégorie principale). */
+.rc-picker__titre {
+  padding: var(--rc-space-4) var(--rc-gutter) var(--rc-space-1);
+  font-size: var(--rc-text-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
 }
 
 .rc-row--compact {
@@ -995,6 +1122,11 @@ button.rc-row:active {
 .rc-tag--danger {
   background: var(--rc-danger-soft);
   color: var(--rc-danger);
+}
+
+.rc-tag--info {
+  background: var(--rc-info-soft);
+  color: var(--rc-info);
 }
 
 .rc-tag--accent {
@@ -1262,6 +1394,61 @@ img.rc-thumb {
   transform: scale(0.97);
 }
 
+/* Ligne de saisie d'une date d'expiration : date + pièces (+ retrait). */
+.rc-date-ligne {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--rc-space-3);
+  align-items: end;
+}
+
+/* La date prend toute la largeur ; les pièces (et le retrait) passent dessous. */
+.rc-date-ligne > :first-child {
+  grid-column: 1 / -1;
+}
+
+.rc-line__ctl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  min-width: 0;
+}
+
+/* Flèche « retour en haut » : discrète, en bas à gauche (le bouton d'action reste à droite). */
+.rc-haut {
+  position: absolute;
+  inset-inline-start: var(--rc-gutter);
+  bottom: var(--rc-space-4);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--rc-line-strong);
+  border-radius: var(--rc-radius-full);
+  background: var(--rc-surface);
+  color: var(--rc-ink);
+  box-shadow: var(--rc-elev-float);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition:
+    opacity var(--rc-dur-base) var(--rc-ease),
+    transform var(--rc-dur-base) var(--rc-ease);
+}
+
+.rc-haut--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.rc-haut ion-icon {
+  font-size: 22px;
+}
+
 /* Reserve space so the last row is never hidden under the FAB. */
 .rc-fab-spacer {
   height: 88px;
@@ -1331,8 +1518,20 @@ ion-modal.rc-sheet--auto {
 
 ion-modal.rc-sheet--auto .ion-page {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   contain: none;
+  /* Contenu plus haut que l'écran (compte de l'admin) : la feuille s'arrête
+     sous la barre d'état et son corps défile. */
+  max-height: calc(94vh - var(--ion-safe-area-top, 0px)) !important;
+}
+
+ion-modal.rc-sheet--auto .rc-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Formulaire dans une feuille (création rapide). */
@@ -1648,6 +1847,100 @@ button.rc-row[aria-checked="true"] {
 /* ================= Summary (hero figures on a screen) ================= */
 .rc-summary {
   padding: var(--rc-space-5) var(--rc-gutter) var(--rc-space-6);
+}
+
+/* Puce de filtre sous un champ de recherche. */
+.rc-filtre-ligne {
+  margin-top: var(--rc-space-3);
+}
+
+/* Écran « À compléter » : une ligne par article, saisie à droite. */
+.rc-todo {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-gutter);
+  border-bottom: 1px solid var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-todo__texte {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rc-todo__titre {
+  margin: 0;
+  font-size: var(--rc-text-callout);
+  font-weight: 700;
+  color: var(--rc-ink);
+  overflow-wrap: anywhere;
+}
+
+.rc-todo__meta {
+  margin: 2px 0 0;
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-todo__meta:empty {
+  display: none;
+}
+
+.rc-todo__saisie {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  width: 196px;
+}
+
+.rc-todo__saisie .rc-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Ligne à cocher (classement groupé) : toute la ligne est le bouton. */
+.rc-todo--choix {
+  width: 100%;
+  border-inline: 0;
+  border-top: 0;
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rc-todo--choix:active {
+  background: var(--rc-press);
+}
+
+.rc-todo--choix .rc-todo__texte,
+.rc-todo--choix .rc-todo__titre,
+.rc-todo--choix .rc-todo__meta {
+  display: block;
+}
+
+/* Fin d'une liste progressive : « Afficher la suite ». */
+.rc-charger-plus {
+  display: block;
+  width: 100%;
+  min-height: var(--rc-target);
+  padding: var(--rc-space-3) var(--rc-gutter);
+  border: 0;
+  background: transparent;
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Étiquettes de la fiche article (taxes, marge, stock). */
+.rc-fiche__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+  margin-top: var(--rc-space-3);
 }
 
 .rc-summary + .rc-section {
@@ -2509,4 +2802,538 @@ a.rc-map__open {
   margin: 2px 0 0;
   font-size: var(--rc-text-meta);
   color: var(--rc-ink-2);
+}
+
+/* Viseur en direct de la date d'expiration : plein écran, cadre au centre. */
+.rc-viseur {
+  --height: 100%;
+  --width: 100%;
+}
+
+.rc-viseur__scene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.rc-viseur__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rc-viseur__cadre {
+  position: absolute;
+  inset-inline: 6%;
+  top: 30%;
+  height: 40%;
+  border: 3px solid #fff;
+  border-radius: var(--rc-radius-lg, 16px);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+
+.rc-viseur__haut {
+  position: absolute;
+  inset-inline-end: var(--rc-space-4);
+  top: calc(var(--rc-space-4) + env(safe-area-inset-top, 0px));
+}
+
+.rc-viseur__aide {
+  position: absolute;
+  inset-inline: var(--rc-space-4);
+  bottom: calc(var(--rc-space-8, 32px) + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md, 12px);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  text-align: center;
+  font-size: 16px;
+}
+
+/* Courbes d'évolution des prix (escalier à deux séries). */
+.rc-lines {
+  margin: 0;
+}
+
+.rc-lines__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rc-lines__grille {
+  stroke: var(--rc-line);
+  stroke-width: 1;
+}
+
+.rc-lines__axe {
+  fill: var(--rc-ink-3);
+  font-size: 10px;
+}
+
+.rc-lines__trait {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.rc-lines__trait {
+  fill: none;
+}
+
+.rc-lines__trait--achat {
+  stroke: var(--rc-ink-2);
+}
+
+.rc-lines__trait--vente {
+  stroke: var(--rc-accent);
+}
+
+.rc-lines__point--achat {
+  fill: var(--rc-ink-2);
+}
+
+.rc-lines__point--vente {
+  fill: var(--rc-accent);
+}
+
+.rc-lines__point {
+  stroke: var(--rc-surface);
+  stroke-width: 1.5;
+}
+
+.rc-lines__legende {
+  display: flex;
+  gap: var(--rc-space-5, 20px);
+  margin-top: var(--rc-space-2);
+  font-size: 13px;
+  color: var(--rc-ink-2);
+}
+
+.rc-lines__cle::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-inline-end: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.rc-lines__cle--achat::before {
+  background: var(--rc-ink-2);
+}
+
+.rc-lines__cle--vente::before {
+  background: var(--rc-accent);
+}
+
+/* Prix d'une ligne de bon d'entrée : flèche de variation du prix d'achat, écart, totaux. */
+.rc-prixligne {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-prixligne__achat {
+  position: relative;
+  min-width: 0;
+}
+
+.rc-prixligne__fleche {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  display: inline-flex;
+}
+
+.rc-variation--hausse,
+.rc-variation-texte--hausse {
+  color: var(--rc-danger);
+}
+
+.rc-variation--baisse,
+.rc-variation-texte--baisse {
+  color: var(--rc-positive);
+}
+
+.rc-variation-texte {
+  font-weight: 600;
+}
+
+.rc-line__totaux {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* ================= Entrepôt 3D ================= */
+ion-content.rc-entrepot-page {
+  --padding-start: 0px;
+  --padding-end: 0px;
+  --padding-top: 0px;
+  --padding-bottom: 0px;
+}
+
+.rc-entrepot {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--rc-bg);
+}
+
+.rc-entrepot__scene {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.rc-entrepot__canvas {
+  display: block;
+  outline: none;
+}
+
+.rc-entrepot__vide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Barre du haut : points de vue, marche, recherche, camions. */
+.rc-entrepot__barre {
+  position: absolute;
+  inset-block-start: var(--rc-space-3);
+  inset-inline: var(--rc-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.rc-entrepot__barre > * {
+  pointer-events: auto;
+}
+
+.rc-entrepot__vues,
+.rc-entrepot__camions {
+  display: flex;
+  gap: var(--rc-space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.rc-entrepot__vues::-webkit-scrollbar,
+.rc-entrepot__camions::-webkit-scrollbar {
+  display: none;
+}
+
+.rc-entrepot__puce {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 var(--rc-space-4);
+  border: 0;
+  border-radius: var(--rc-radius-full);
+  background: var(--rc-surface);
+  color: var(--rc-ink);
+  font-size: var(--rc-text-callout);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px var(--rc-line-strong), 0 2px 8px rgba(26, 24, 22, 0.1);
+  cursor: pointer;
+}
+
+.rc-entrepot__puce ion-icon {
+  font-size: 18px;
+}
+
+.rc-entrepot__puce--on {
+  background: var(--rc-ink);
+  color: var(--rc-on-ink);
+  box-shadow: none;
+}
+
+.rc-entrepot__recherche {
+  position: relative;
+  max-width: 420px;
+}
+
+.rc-entrepot__recherche .rc-field__box {
+  background: var(--rc-surface);
+  box-shadow: 0 2px 8px rgba(26, 24, 22, 0.1);
+}
+
+.rc-entrepot__resultats {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  z-index: 4;
+  margin: 0;
+  padding: var(--rc-space-1);
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line-strong), var(--rc-elev-float);
+}
+
+.rc-entrepot__resultat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--rc-space-2) var(--rc-space-3);
+  border: 0;
+  border-radius: var(--rc-radius-sm);
+  background: transparent;
+  color: var(--rc-ink);
+  font-size: var(--rc-text-callout);
+  text-align: start;
+  cursor: pointer;
+}
+
+.rc-entrepot__resultat:hover {
+  background: var(--rc-press);
+}
+
+.rc-entrepot__resultat span {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+}
+
+.rc-entrepot__resultat--vide {
+  color: var(--rc-ink-2);
+  cursor: default;
+}
+
+/* Panneau de détail : à droite sur ordinateur, en bas sur téléphone. */
+.rc-entrepot__panneau {
+  position: absolute;
+  inset-inline: var(--rc-space-2);
+  inset-block-end: var(--rc-space-2);
+  z-index: 3;
+  max-height: 44%;
+  overflow-y: auto;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line-strong), var(--rc-elev-float);
+}
+
+.rc-entrepot__contenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-4);
+}
+
+.rc-entrepot__entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rc-space-2);
+}
+
+.rc-entrepot__sur {
+  margin: 0;
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+  color: var(--rc-ink-2);
+}
+
+.rc-entrepot__titre {
+  margin: 0;
+  font-size: var(--rc-text-title);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.rc-entrepot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+
+.rc-entrepot__pave {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  gap: var(--rc-space-1);
+  justify-content: start;
+}
+
+.rc-entrepot__pave .rc-btn {
+  min-height: 44px;
+  padding: 0;
+}
+
+/* Marche à pied sur écran tactile : croix directionnelle. */
+.rc-entrepot__pad {
+  position: absolute;
+  inset-inline-start: var(--rc-space-4);
+  inset-block-end: calc(44% + var(--rc-space-5));
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
+  gap: var(--rc-space-1);
+  touch-action: none;
+}
+
+.rc-entrepot__pad-bouton {
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  color: var(--rc-ink);
+  font-size: 22px;
+  font-weight: 800;
+  box-shadow: 0 0 0 1px var(--rc-line-strong), 0 2px 8px rgba(26, 24, 22, 0.14);
+  user-select: none;
+}
+
+.rc-entrepot__pad-haut {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rc-entrepot__pad-gauche {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.rc-entrepot__pad-bas {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.rc-entrepot__pad-droite {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+@media (min-width: 900px) {
+  .rc-entrepot__barre {
+    inset-inline-end: calc(380px + var(--rc-space-3) * 2);
+  }
+
+  .rc-entrepot__panneau {
+    inset-block: var(--rc-space-3);
+    inset-inline-start: auto;
+    inset-inline-end: var(--rc-space-3);
+    width: 360px;
+    max-height: none;
+  }
+
+  .rc-entrepot__pad {
+    inset-block-end: var(--rc-space-5);
+  }
+}
+
+/* Souris + clavier : la marche se fait avec ZQSD, la croix tactile est inutile. */
+@media (hover: hover) and (pointer: fine) {
+  .rc-entrepot__pad {
+    display: none;
+  }
+}
+
+/* Entrepôt 3D : légende des couleurs de stock, voyant « en direct », sous-titres du panneau. */
+.rc-entrepot__legende {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-entrepot__puce--petite {
+  min-height: 34px;
+  padding: 0 var(--rc-space-3);
+  font-size: 13.5px;
+}
+
+.rc-entrepot__puce--choisie {
+  background: var(--rc-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--rc-accent);
+}
+
+.rc-entrepot__point {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.rc-entrepot__statut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-entrepot__direct {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 var(--rc-space-3);
+  border: 0;
+  border-radius: var(--rc-radius-full);
+  background: var(--rc-surface);
+  color: var(--rc-ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px var(--rc-line-strong);
+  cursor: pointer;
+}
+
+.rc-entrepot__direct:disabled ion-icon {
+  animation: rc-tourne 0.8s linear infinite;
+}
+
+.rc-entrepot__direct-point {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fae6a;
+  animation: rc-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes rc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes rc-tourne {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rc-entrepot__sous-titre {
+  margin: var(--rc-space-2) 0 calc(-1 * var(--rc-space-1));
+  font-size: var(--rc-text-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-row--choisie {
+  background: var(--rc-accent-soft);
 }

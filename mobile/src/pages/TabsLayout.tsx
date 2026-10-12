@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Route, useLocation, useNavigate } from "react-router-dom";
 import { IonIcon, IonLabel, IonRouterOutlet, IonTabBar, IonTabButton, IonTabs } from "@ionic/react";
 import {
@@ -22,6 +22,11 @@ import Clients from "./Clients";
 import ClientForm from "./ClientForm";
 import ClientHistorique from "./ClientHistorique";
 import Stock from "./Stock";
+import ArticlesACompleter from "./ArticlesACompleter";
+import Categories from "./Categories";
+import Peremptions from "./Peremptions";
+// Le plan 3D embarque three.js : chargé seulement quand on l'ouvre.
+const Entrepot3D = lazy(() => import("./Entrepot3D"));
 import ChargementForm from "./ChargementForm";
 import StockDocumentDetail from "./StockDocumentDetail";
 import CamionArticleHistorique from "./CamionArticleHistorique";
@@ -33,11 +38,13 @@ import InventaireDetail from "./InventaireDetail";
 import Vendeurs from "./Vendeurs";
 import VendeurForm from "./VendeurForm";
 import { useAuth } from "../auth/AuthContext";
+import BarreLaterale from "../components/BarreLaterale";
 import { t } from "../i18n";
 import { accueil } from "../utils/navigation";
 import { demarrerSyncAuto } from "../offline/sync";
 
 const TOP_LEVEL = ["/tableau-de-bord", "/factures", "/articles", "/clients", "/stock", "/inventaires"];
+
 
 // Ionic garde les vues montées : un <Navigate> se redéclenche à chaque rendu
 // et renverrait vers /factures depuis n'importe quel écran. Cette redirection
@@ -86,6 +93,9 @@ export default function TabsLayout() {
       ];
 
   return (
+    <>
+    {/* Web (≥ 768 px) : menu latéral avec sous-menus ; la barre d'onglets du bas est celle du téléphone. */}
+    <BarreLaterale />
     <IonTabs>
       <IonRouterOutlet>
         <Route path="/tableau-de-bord" element={<Dashboard />} />
@@ -101,6 +111,17 @@ export default function TabsLayout() {
         <Route path="/stock/chargement" element={<ChargementForm kind="chargement" />} />
         <Route path="/stock/entree" element={<ChargementForm kind="entree" />} />
         <Route path="/stock/retour" element={<ChargementForm kind="retour" />} />
+        <Route path="/stock/a-completer" element={<ArticlesACompleter />} />
+        <Route path="/stock/categories" element={<Categories />} />
+        <Route path="/stock/peremptions" element={<Peremptions />} />
+        <Route
+          path="/stock/entrepot"
+          element={
+            <Suspense fallback={null}>
+              <Entrepot3D />
+            </Suspense>
+          }
+        />
         <Route path="/stock/entrees/:id" element={<StockDocumentDetail kind="entree" />} />
         <Route path="/stock/chargements/:id" element={<StockDocumentDetail kind="chargement" />} />
         <Route path="/stock/camion/:vendeurId/articles/:articleId" element={<CamionArticleHistorique />} />
@@ -119,5 +140,6 @@ export default function TabsLayout() {
         ))}
       </IonTabBar>
     </IonTabs>
+    </>
   );
 }

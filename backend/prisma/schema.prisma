@@ -88,10 +88,13 @@ model Societe {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  articles Article[]
-  clients  Client[]
-  users    User[]
-  entrees  EntreeDepot[]
+  articles    Article[]
+  clients     Client[]
+  users       User[]
+  entrees     EntreeDepot[]
+  inventaires Inventaire[]
+  categories  Categorie[]
+  entrepot    Entrepot?
 
   @@map("societes")
 }
@@ -132,23 +135,52 @@ model User {
 }
 
 model Article {
-  id          String    @id @default(uuid())
-  societeId   String
-  societe     Societe   @relation(fields: [societeId], references: [id])
-  // Unique dans la société (deux sociétés peuvent avoir le même code).
-  code        String
-  codeBarre   String?
-  designation String
-  marque      String?
-  unit        String?
-  img         String?
-  prixAchat   Decimal   @db.Decimal(12, 3)
-  prixVente   Decimal   @db.Decimal(12, 3)
-  colisage    Int       @default(1)
-  tva         Decimal   @default(19) @db.Decimal(5, 2)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id              String               @id @default(uuid())
+  societeId       String
+  societe         Societe              @relation(fields: [societeId], references: [id])
+  // Référence interne, facultative ; unique dans la société quand elle est
+  // renseignée (deux sociétés peuvent avoir la même).
+  code            String?
+  // Obligatoire à la création / modification (contrôlé par l'API ; les anciens
+  // articles sans code-barres restent lisibles).
+  codeBarre       String?
+  designation     String
+  marque          String?
+  unit            String?
+  img             String?
+  prixAchat       Decimal              @db.Decimal(12, 3)
+  prixVente       Decimal              @db.Decimal(12, 6)
+  colisage        Int                  @default(1)
+  tva             Decimal              @default(19) @db.Decimal(5, 2)
+  // FODEC (% du prix HT, 0 ou 1) : la TVA se calcule sur HT + FODEC.
+  fodec           Decimal              @default(0) @db.Decimal(5, 2)
+  // Prix de gros HT (facultatif).
+  prixGros        Decimal?             @db.Decimal(12, 6)
+  // Date à laquelle l'admin a confirmé que l'article n'a aucun stock au dépôt.
+  stockVerifieAt  DateTime?
+  // Exclu du suivi de péremption (aucune date applicable à cet article).
+  sansPeremption  Boolean              @default(false)
+  // Dernière recherche automatique de photo (Open Food Facts) : évite de la refaire pour rien.
+  photoCherchee   DateTime?
+  lots            LotDepot[]
+  historiquePrix  HistoriquePrix[]
+  emplacements    EmplacementArticle[]
+  // Stock minimum (en pièces) : en dessous, l'article est « stock bas » sur le plan 3D. Vide : un colis.
+  stockMini       Decimal?             @db.Decimal(12, 3)
+  // Mise en avant (bleu sur le plan 3D) : nouveauté ou promotion, jusqu'à la date indiquée (vide : sans fin).
+  etiquette       EtiquetteArticle?
+  etiquetteJusqua DateTime?            @db.Date
+  // Autres codes-barres du même produit (variantes : saveur, couleur, modèle…) : les scanner ramène cet article.
+  codesBarres     CodeBarreArticle[]
+  // Catégorie (la plus précise : sous-catégorie si elle existe).
+  categorieId     String?
+  categorie       Categorie?           @relation(fields: [categorieId], references: [id])
+  // Position dans le catalogue : ordre des lignes du fichier importé, puis les
+  // articles créés dans l'app à la suite.
+  ordre           Int?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
 
   stockCamion      StockCamion[]
   stockDepot       StockDepot?
@@ -277,13 +309,17 @@ model EntreeDepot {
 }
 
 model LigneEntreeDepot {
-  id        String      @id @default(uuid())
-  entreeId  String
-  entree    EntreeDepot @relation(fields: [entreeId], references: [id], onDelete: Cascade)
-  articleId String
-  article   Article     @relation(fields: [articleId], references: [id])
+  id             String      @id @default(uuid())
+  entreeId       String
+  entree         EntreeDepot @relation(fields: [entreeId], references: [id], onDelete: Cascade)
+  articleId      String
+  article        Article     @relation(fields: [articleId], references: [id])
   // En pièces.
-  quantite  Decimal     @db.Decimal(12, 3)
+  quantite       Decimal     @db.Decimal(12, 3)
+  // Date d'expiration des pièces reçues (si connue).
+  dateExpiration DateTime?   @db.Date
+  // Prix d'achat HT de la réception, quand il a été saisi (le prix de l'article change avec).
+  prixAchat      Decimal?    @db.Decimal(12, 6)
 
   @@map("lignes_entree_depot")
 }
@@ -293,8 +329,11 @@ model LigneEntreeDepot {
 // sont figées et le stock camion est remplacé par les quantités comptées.
 model Inventaire {
   id             String            @id @default(uuid())
-  vendeurId      String
-  vendeur        User              @relation("InventaireVendeur", fields: [vendeurId], references: [id])
+  societeId      String
+  societe        Societe           @relation(fields: [societeId], references: [id])
+  // Camion inventorié ; null = inventaire du dépôt de la société.
+  vendeurId      String?
+  vendeur        User?             @relation("InventaireVendeur", fields: [vendeurId], references: [id])
   adminId        String
   admin          User              @relation("InventaireAdmin", fields: [adminId], references: [id])
   statut         StatutInventaire  @default(EN_COURS)
@@ -305,6 +344,7 @@ model Inventaire {
   lignes         LigneInventaire[]
 
   @@index([vendeurId, createdAt])
+  @@index([societeId, createdAt])
   @@map("inventaires")
 }
 
@@ -391,7 +431,7 @@ model LigneFacture {
   articleId    String
   article      Article @relation(fields: [articleId], references: [id])
   quantite     Decimal @db.Decimal(12, 3)
-  prixUnitaire Decimal @db.Decimal(12, 3)
+  prixUnitaire Decimal @db.Decimal(12, 6)
   tauxTva      Decimal @db.Decimal(5, 2)
   montantHT    Decimal @db.Decimal(12, 3)
   montantTTC   Decimal @db.Decimal(12, 3)
@@ -464,4 +504,152 @@ model Visite {
   @@index([updatedAt])
   @@index([vendeurId, date])
   @@map("visites")
+}
+
+// Arbre de catégories d'une société (catégorie › sous-catégorie ; l'arbre admet plus de
+// niveaux, la limite est dans l'API).
+model Categorie {
+  id          String      @id @default(uuid())
+  societeId   String
+  societe     Societe     @relation(fields: [societeId], references: [id])
+  nom         String
+  parentId    String?
+  parent      Categorie?  @relation("ArbreCategories", fields: [parentId], references: [id], onDelete: Restrict)
+  enfants     Categorie[] @relation("ArbreCategories")
+  ordre       Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  articles    Article[]
+  // Suivi des dates d'expiration (les sous-catégories héritent de leur catégorie).
+  perissable  Boolean     @default(false)
+  // Jours avant l'expiration où un lot est signalé (30 par défaut).
+  alerteJours Int?
+
+  @@index([societeId, parentId])
+  @@map("categories")
+}
+
+// Lot de marchandise au dépôt : une quantité d'un article qui expire à la même date.
+// Un article peut avoir plusieurs lots (livraisons de dates différentes). La somme des
+// lots d'un article égale son stock dépôt ; la date null = « date inconnue » (stock
+// existant avant le suivi, retour de camion…).
+model LotDepot {
+  id             String    @id @default(uuid())
+  articleId      String
+  article        Article   @relation(fields: [articleId], references: [id])
+  dateExpiration DateTime? @db.Date
+  quantite       Decimal   @db.Decimal(12, 3)
+  // Bon d'entrée qui a apporté le lot (traçabilité).
+  entreeId       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([articleId])
+  @@index([dateExpiration])
+  @@map("lots_depot")
+}
+
+// D'où vient un changement de prix.
+// Mise en avant d'un article (affichée en bleu sur le plan 3D du dépôt).
+enum EtiquetteArticle {
+  NOUVEAU
+  PROMOTION
+}
+
+enum SourcePrix {
+  CREATION
+  MODIFICATION
+  ENTREE
+  IMPORT
+}
+
+// Historique des prix d'un article : une ligne à chaque changement de prix d'achat ou de vente
+// (les prix en vigueur À PARTIR de `date`). Sert aux courbes de la fiche article.
+model HistoriquePrix {
+  id        String     @id @default(uuid())
+  articleId String
+  article   Article    @relation(fields: [articleId], references: [id])
+  date      DateTime   @default(now())
+  // HT, comme sur l'article.
+  prixAchat Decimal    @db.Decimal(12, 6)
+  prixVente Decimal    @db.Decimal(12, 6)
+  tva       Decimal    @db.Decimal(5, 2)
+  fodec     Decimal    @db.Decimal(5, 2)
+  source    SourcePrix
+  // Bon d'entrée à l'origine du changement.
+  entreeId  String?
+  adminId   String?
+
+  @@index([articleId, date])
+  @@map("prix_historique")
+}
+
+// Code-barres supplémentaire d'un article : même produit (marque, unité, prix) dans une autre
+// variante (saveur, couleur, modèle…) ou un autre emballage. Unique dans la société, comme le code-barres principal.
+model CodeBarreArticle {
+  id        String   @id @default(uuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  societeId String
+  codeBarre String
+  // Variante (« Fraise », « Rouge », « Modèle B »), facultatif.
+  libelle   String?
+  createdAt DateTime @default(now())
+
+  @@unique([societeId, codeBarre])
+  @@index([articleId])
+  @@map("articles_codes_barres")
+}
+
+// Plan du dépôt en 3D : le bâtiment d'une société (dimensions en mètres), ses étagères et ce qui y est rangé.
+model Entrepot {
+  id         String         @id @default(uuid())
+  societeId  String         @unique
+  societe    Societe        @relation(fields: [societeId], references: [id])
+  // Dimensions du bâtiment : largeur (axe x) × profondeur (axe z).
+  largeur    Float          @default(32)
+  profondeur Float          @default(22)
+  racks      EntrepotRack[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@map("entrepots")
+}
+
+// Une étagère (rack) : `niveaux` étages × `travees` cases de large. (x, z) = son centre au sol, en mètres.
+model EntrepotRack {
+  id           String               @id @default(uuid())
+  entrepotId   String
+  entrepot     Entrepot             @relation(fields: [entrepotId], references: [id], onDelete: Cascade)
+  nom          String
+  allee        String
+  x            Float
+  z            Float
+  // 0 : longueur le long de l'axe x ; 90 : le long de l'axe z.
+  rotation     Int                  @default(0)
+  niveaux      Int                  @default(4)
+  travees      Int                  @default(5)
+  emplacements EmplacementArticle[]
+  createdAt    DateTime             @default(now())
+
+  @@index([entrepotId])
+  @@map("entrepot_racks")
+}
+
+// Une quantité d'un article rangée dans une case (niveau, travée) d'une étagère. Indicatif : il ne bloque
+// aucun mouvement de stock ; le stock reste celui du dépôt (stock_depot).
+model EmplacementArticle {
+  id        String       @id @default(uuid())
+  rackId    String
+  rack      EntrepotRack @relation(fields: [rackId], references: [id], onDelete: Cascade)
+  niveau    Int
+  travee    Int
+  articleId String
+  article   Article      @relation(fields: [articleId], references: [id])
+  quantite  Decimal      @db.Decimal(12, 3)
+  updatedAt DateTime     @updatedAt
+
+  @@unique([rackId, niveau, travee, articleId])
+  @@index([articleId])
+  @@map("entrepot_emplacements")
 }

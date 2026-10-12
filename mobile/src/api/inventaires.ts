@@ -1,17 +1,24 @@
 import { apiRequest } from "./client";
 import type { Inventaire, InventaireResume, LigneInventaireInput } from "../types/inventaire";
 
-export function listInventaires(vendeurId?: string): Promise<InventaireResume[]> {
-  return apiRequest<InventaireResume[]>(`/inventaires${vendeurId ? `?vendeurId=${vendeurId}` : ""}`);
+/** Valeur désignant le dépôt dans une cible d'inventaire (sinon : id du vendeur du camion). */
+export const DEPOT = "depot";
+
+/** Inventaires du dépôt, ou des camions (d'un seul si `vendeurId` est donné). */
+export function listInventaires(lieu: "DEPOT" | "CAMION", vendeurId?: string): Promise<InventaireResume[]> {
+  const q = new URLSearchParams({ lieu });
+  if (lieu === "CAMION" && vendeurId) q.set("vendeurId", vendeurId);
+  return apiRequest<InventaireResume[]>(`/inventaires?${q}`);
 }
 
 export function getInventaire(id: string): Promise<Inventaire> {
   return apiRequest<Inventaire>(`/inventaires/${id}`);
 }
 
-/** Ouvre un inventaire pour ce camion, ou reprend celui déjà en cours. */
-export function ouvrirInventaire(vendeurId: string): Promise<{ id: string }> {
-  return apiRequest<{ id: string }>("/inventaires", { method: "POST", body: { vendeurId } });
+/** Ouvre un inventaire pour ce camion (ou pour le dépôt), ou reprend celui déjà en cours. */
+export function ouvrirInventaire(cible: string): Promise<{ id: string }> {
+  const body = cible === DEPOT ? { lieu: "DEPOT" } : { vendeurId: cible };
+  return apiRequest<{ id: string }>("/inventaires", { method: "POST", body });
 }
 
 export function enregistrerComptage(id: string, articleId: string, input: LigneInventaireInput) {

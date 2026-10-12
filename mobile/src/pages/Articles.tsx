@@ -1,5 +1,5 @@
 import { joinMeta } from "../utils/format";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IonContent, IonPage, IonRefresher, IonRefresherContent, RefresherEventDetail } from "@ionic/react";
 import { addOutline, cubeOutline } from "ionicons/icons";
@@ -7,11 +7,20 @@ import { listArticles } from "../offline/donnees";
 import { useApresSync } from "../offline/sync";
 import type { Article } from "../types/article";
 import ArticleImage from "../components/ArticleImage";
+import { prixTTC } from "../utils/tarifs";
+import TriArticlesButton from "../components/TriArticlesButton";
+import FiltreCategorie from "../components/FiltreCategorie";
+import { filtrerParCategorie } from "../utils/categories";
+import { useCategories } from "../utils/useCategories";
+import { trierArticles, useTriArticles } from "../utils/triArticles";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import {
   AccountButton,
   AppHeader,
+  CellulesTableau,
+  EnteteTableau,
+  ChargerPlus,
   EmptyState,
   Fab,
   FabSpacer,
@@ -21,6 +30,9 @@ import {
   SearchField,
   Section,
   SkeletonList,
+  useListeProgressive,
+  BoutonHaut,
+  useRetourEnHaut,
 } from "../ui";
 import { t, tn } from "../i18n";
 
@@ -32,6 +44,13 @@ export default function Articles() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tri, setTri] = useTriArticles();
+  const haut = useRetourEnHaut();
+  const { categories } = useCategories();
+  const [categorie, setCategorie] = useState<string | undefined>(undefined);
+  const articlesFiltres = useMemo(() => filtrerParCategorie(articles, categories, categorie, (a) => a), [articles, categories, categorie]);
+  const articlesTries = useMemo(() => trierArticles(articlesFiltres, tri), [articlesFiltres, tri]);
+  const liste = useListeProgressive(articlesTries, `${query}|${categorie}|${tri.cle}|${tri.inverse}`);
 
   const fetchArticles = useCallback(async () => {
     setError(null);
@@ -77,10 +96,11 @@ export default function Articles() {
   return (
     <IonPage>
       <AppHeader large title={t("Articles")} actions={<AccountButton />}>
-        <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, code…")} />
+        <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />
+        <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />
       </AppHeader>
 
-      <IonContent>
+      <IonContent {...haut.contenu}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
@@ -91,7 +111,17 @@ export default function Articles() {
           </PageNotice>
         )}
 
-        <Section flush aside={!firstLoad && articles.length > 0 ? tn(articles.length, "{n} article", "{n} articles") : undefined}>
+        <Section
+          flush
+          aside={
+            !firstLoad && articles.length > 0 ? (
+              <span className="rc-liste-tete">
+                <span>{tn(articlesTries.length, "{n} article", "{n} articles")}</span>
+                <TriArticlesButton value={tri} onChange={setTri} />
+              </span>
+            ) : undefined
+          }
+        >
           {firstLoad ? (
             <SkeletonList thumb />
           ) : !error && articles.length === 0 ? (
@@ -102,25 +132,31 @@ export default function Articles() {
             />
           ) : (
             articles.length > 0 && (
+              <>
+              <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Prix TTC")} vignette />
               <div className="rc-list">
-                {articles.map((article) => (
+                {liste.visibles.map((article) => (
                   <Row
                     key={article.id}
+                    className="rc-row--tableau"
                     thumb
                     onClick={() => navigate(`/articles/${article.id}`)}
                     leading={<ArticleImage src={article.img} alt="" />}
                     title={article.designation}
                     meta={joinMeta([article.code, article.unit, article.marque])}
-                    trailing={<Money value={article.prixVente} />}
+                    trailing={<CellulesTableau valeurs={[article.marque, article.unit, article.codeBarre]} dernier={<Money value={prixTTC(article)} />} />}
                   />
                 ))}
+                <ChargerPlus reste={liste.reste} onPlus={liste.plus} />
               </div>
+              </>
             )
           )}
         </Section>
         {isAdmin && <FabSpacer />}
 
         {isAdmin && <Fab icon={addOutline} label={t("Nouvel article")} onClick={() => navigate("/articles/new")} />}
+        <BoutonHaut visible={haut.visible} onClick={haut.remonter} />
       </IonContent>
     </IonPage>
   );

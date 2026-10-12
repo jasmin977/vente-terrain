@@ -31,9 +31,11 @@ import {
   SearchField,
   Section,
   Segmented,
+  useEcranLarge,
   SkeletonList,
 } from "../ui";
 import { t, tn } from "../i18n";
+import { useVueUrl } from "../utils/useVueUrl";
 
 type Vue = "clients" | "credits";
 
@@ -54,6 +56,9 @@ export default function Clients() {
 
   // Ouverture directe sur les crédits (lien « Voir les crédits » du tableau de bord).
   const location = useLocation();
+  // Web : Clients / Crédits se choisissent dans le menu latéral (?vue=…), pas par onglets.
+  const web = useEcranLarge();
+  useVueUrl("/clients", "vue", ["clients", "credits"] as const, setVue);
   useEffect(() => {
     if ((location.state as { vue?: Vue } | null)?.vue === "credits") setVue("credits");
   }, [location.state]);
@@ -119,16 +124,23 @@ export default function Clients() {
 
   return (
     <IonPage>
-      <AppHeader large title={t("Clients")} actions={<AccountButton />}>
-        <Segmented
-          label={t("Affichage")}
-          value={vue}
-          onChange={setVue}
-          options={[
-            { value: "clients", label: t("Clients") },
-            { value: "credits", label: t("Crédits") },
-          ]}
-        />
+      <AppHeader
+        large
+        eyebrow={web && vue === "credits" ? t("Clients") : undefined}
+        title={web && vue === "credits" ? t("Crédits") : t("Clients")}
+        actions={<AccountButton />}
+      >
+        {!web && (
+          <Segmented
+            label={t("Affichage")}
+            value={vue}
+            onChange={setVue}
+            options={[
+              { value: "clients", label: t("Clients") },
+              { value: "credits", label: t("Crédits") },
+            ]}
+          />
+        )}
         {vue === "clients" ? (
           <SearchField value={query} onChange={setQuery} placeholder={t("Code, commerce, ville…")} />
         ) : (

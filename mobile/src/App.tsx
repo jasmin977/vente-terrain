@@ -4,7 +4,7 @@ import { IonApp, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import Login from './pages/Login';
 import EspaceSociete from './societe/EspaceSociete';
-import { SocieteProvider } from './societe/SocieteContext';
+import { SocieteProvider, useSociete } from './societe/SocieteContext';
 import { AuthProvider } from './auth/AuthContext';
 import PrivateRoute from './auth/PrivateRoute';
 import { getLang, onLangChange } from './i18n';
@@ -51,8 +51,35 @@ import '@fontsource/instrument-serif/latin-ext-400.css';
 import './theme/variables.css';
 import './theme/global.css';
 import './theme/components.css';
+import './theme/web.css';
 
 setupIonicReact();
+
+/** Routeur recréé à chaque langue et à chaque société ouverte : l'outlet des
+ *  onglets d'Ionic ne supporte pas d'être remonté seul (ses vues restaient
+ *  celles de l'ancien outlet et les onglets ne répondaient plus). */
+function Routeur({ lang }: { lang: string }) {
+  const { generation } = useSociete();
+  return (
+      <IonReactRouter key={`${lang}-${generation}`}>
+        {/* Connexion ↔ application est un changement de racine, pas une pile de
+            navigation : un simple <Routes>. Avec un IonRouterOutlet ici, l'écran
+            de l'application restait invisible (ion-page-invisible) après la
+            connexion. La navigation empilée reste gérée par l'outlet des onglets. */}
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/*"
+            element={
+              <PrivateRoute>
+                <EspaceSociete />
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </IonReactRouter>
+  );
+}
 
 const App: React.FC = () => {
   // Changement de langue : on remonte l'arbre des écrans pour que tous les
@@ -70,23 +97,7 @@ const App: React.FC = () => {
   <IonApp>
     <AuthProvider>
       <SocieteProvider>
-      <IonReactRouter key={lang}>
-        {/* Connexion ↔ application est un changement de racine, pas une pile de
-            navigation : un simple <Routes>. Avec un IonRouterOutlet ici, l'écran
-            de l'application restait invisible (ion-page-invisible) après la
-            connexion. La navigation empilée reste gérée par l'outlet des onglets. */}
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/*"
-            element={
-              <PrivateRoute>
-                <EspaceSociete />
-              </PrivateRoute>
-            }
-          />
-        </Routes>
-      </IonReactRouter>
+      <Routeur lang={lang} />
       </SocieteProvider>
     </AuthProvider>
   </IonApp>

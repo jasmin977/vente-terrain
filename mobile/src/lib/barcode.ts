@@ -5,11 +5,17 @@ import { t } from "../i18n";
 export type ScanResult = { code: string } | { error: string } | { cancelled: true };
 
 /**
+ * Le scanner à caméra n'existe que dans l'application du téléphone. Sur le web (ordinateur), on utilise
+ * une douchette : elle « tape » le code dans le champ actif, suivi d'Entrée.
+ */
+export const scanCameraDisponible = () => Capacitor.isNativePlatform();
+
+/**
  * Ouvre le scanner de code-barres (ML Kit). Utilisé par la fiche article et
  * par tous les champs de recherche de produits.
  */
 export async function scannerCodeBarre(): Promise<ScanResult> {
-  if (!Capacitor.isNativePlatform()) {
+  if (!scanCameraDisponible()) {
     return { error: t("Le scan du code-barres n'est disponible que dans l'application mobile.") };
   }
   try {

@@ -5,11 +5,13 @@
 //   dernières données du serveur (en direct si le réseau répond, sinon le cache)
 //   avec les actions en attente appliquées par-dessus.
 import * as articlesApi from "../api/articles";
+import * as categoriesApi from "../api/categories";
 import * as clientsApi from "../api/clients";
 import * as creditsApi from "../api/credits";
 import * as facturesApi from "../api/factures";
 import { ApiError, apiRequest, estErreurReseau } from "../api/client";
 import type { Article } from "../types/article";
+import type { Categorie } from "../types/categorie";
 import type { Client, ClientInput } from "../types/client";
 import type { CreditClient, EncaissementCredit, EncaissementInput, FactureCredit, SituationCreditClient } from "../types/credit";
 import type { Facture, FactureInput, LigneFacture } from "../types/facture";
@@ -138,9 +140,15 @@ function avecPaiementsEnAttente(f: Facture, file: ActionEnAttente[]): Facture {
 export async function listArticles(filtres: articlesApi.ArticleFilters = {}): Promise<Article[]> {
   if (!modeHorsLigne()) return articlesApi.listArticles(filtres);
   const articles = await frais("articles", "/articles");
-  if (filtres.codeBarre) return articles.filter((a) => a.codeBarre === filtres.codeBarre || a.code === filtres.codeBarre);
+  if (filtres.codeBarre) return articles.filter((a) => a.codeBarre === filtres.codeBarre || a.code === filtres.codeBarre || a.codesBarres?.some((c) => c.codeBarre === filtres.codeBarre));
   if (filtres.q) return articles.filter((a) => articleCorrespond(a, filtres.q!));
   return articles;
+}
+
+/** Catégories des articles (filtre du catalogue, y compris hors ligne). */
+export async function listCategories(): Promise<Categorie[]> {
+  if (!modeHorsLigne()) return categoriesApi.listCategories();
+  return frais("categories", "/categories");
 }
 
 /* ---------------------------------------------------------------- Clients */

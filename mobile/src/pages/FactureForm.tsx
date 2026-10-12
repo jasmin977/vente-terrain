@@ -9,6 +9,7 @@ import type { Article } from "../types/article";
 import type { ModePaiement, TypeVente } from "../types/facture";
 import { ApiError } from "../api/client";
 import ArticleImage from "../components/ArticleImage";
+import { arrondir, ttcDepuisHT } from "../utils/tarifs";
 import ArticlePickerModal from "./ArticlePickerModal";
 import ClientQuickSheet from "./ClientQuickSheet";
 import { formatAmount, joinMeta } from "../utils/format";
@@ -87,7 +88,8 @@ export default function FactureForm() {
         return {
           articleId,
           quantite: article ? Number(article.colisage) || 1 : 1,
-          prixUnitaire: article ? Number(article.prixVente) : 0,
+          // HT facturé = HT + FODEC (la TVA s'applique sur les deux) : le total TTC retombe sur le prix de vente.
+          prixUnitaire: article ? arrondir(Number(article.prixVente) * (1 + Number(article.fodec ?? 0) / 100), 6) : 0,
           tauxTva: article ? Number(article.tva) : 0,
         };
       })
@@ -248,7 +250,7 @@ export default function FactureForm() {
                     title={name}
                     meta={
                       <>
-                        {formatAmount(line.prixUnitaire)} {t("TND")}{article?.unit ? ` · ${article.unit}` : ""}
+                        {formatAmount(ttcDepuisHT(line.prixUnitaire, line.tauxTva))} {t("TND")}{article?.unit ? ` · ${article.unit}` : ""}
                       </>
                     }
                     removeLabel={t("Retirer {nom}", { nom: name })}

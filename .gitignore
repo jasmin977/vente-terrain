@@ -23,3 +23,7 @@ Thumbs.db
 *.jks
 *.keystore
 keystore.properties
+
+# Fichiers Excel de la société (prix d'achat, marges, stock) : données réelles, jamais dans le dépôt public
+*.xlsx
+*.xls

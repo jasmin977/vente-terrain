@@ -1,4 +1,5 @@
 import type { Article } from "../types/article";
+import type { Categorie } from "../types/categorie";
 import type { Client } from "../types/client";
 import type { CreditClient } from "../types/credit";
 import type { Facture } from "../types/facture";
@@ -8,6 +9,7 @@ import { ecrire, lire } from "./stockage";
 // actions en attente sont appliquées par-dessus à la lecture (voir donnees.ts).
 export interface Caches {
   articles: Article[];
+  categories: Categorie[];
   clients: Client[];
   credits: CreditClient[];
   /** Factures du jour du vendeur, telles que renvoyées par le serveur. */

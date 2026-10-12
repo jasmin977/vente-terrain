@@ -1,11 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IonIcon, useIonToast } from "@ionic/react";
 import { checkmark, searchOutline } from "ionicons/icons";
 import type { Article } from "../types/article";
 import ArticleImage from "../components/ArticleImage";
+import { prixTTC } from "../utils/tarifs";
 import { formatAmount } from "../utils/format";
-import { articleCorrespond, articleParCode } from "../utils/articleSearch";
-import { Button, EmptyState, Row, SearchField, Sheet } from "../ui";
+import { articleCorrespond, articleParCode, varianteDuCode } from "../utils/articleSearch";
+import { Button, ChargerPlus, EmptyState, Row, SearchField, Sheet, useListeProgressive } from "../ui";
+import FiltreCategorie from "../components/FiltreCategorie";
+import { filtrerParCategorie } from "../utils/categories";
+import { useCategories } from "../utils/useCategories";
 import { t } from "../i18n";
 
 interface ArticlePickerModalProps {
@@ -35,7 +39,23 @@ export default function ArticlePickerModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [toast] = useIonToast();
 
-  const filtered = useMemo(() => articles.filter((a) => articleCorrespond(a, query)), [articles, query]);
+  const { categories } = useCategories();
+  const [categorie, setCategorie] = useState<string | undefined>(undefined);
+  // Articles scannés pendant cette sélection, le dernier en premier : ils remontent en tête de liste.
+  const [scannes, setScannes] = useState<string[]>([]);
+  const groupeRef = useRef<HTMLDivElement>(null);
+  const filtered = useMemo(() => {
+    const trouves = filtrerParCategorie(articles.filter((a) => articleCorrespond(a, query)), categories, categorie, (a) => a);
+    if (scannes.length === 0) return trouves;
+    const rang = new Map(scannes.map((id, i) => [id, i]));
+    const enTete = trouves.filter((a) => rang.has(a.id)).sort((a, b) => rang.get(a.id)! - rang.get(b.id)!);
+    return [...enTete, ...trouves.filter((a) => !rang.has(a.id))];
+  }, [articles, categories, categorie, query, scannes]);
+  const liste = useListeProgressive(filtered, `${query}|${categorie}|${scannes.join(",")}`);
+  // Après un scan, la liste revient en haut pour montrer l'article choisi.
+  useEffect(() => {
+    if (scannes.length > 0) groupeRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [scannes]);
 
   // Scan rapide : l'article reconnu est coché directement ; sinon le code
   // part dans la recherche pour montrer qu'aucun article ne correspond.
@@ -46,8 +66,10 @@ export default function ArticlePickerModal({
       return;
     }
     setQuery("");
+    setScannes((prev) => [article.id, ...prev.filter((id) => id !== article.id)]);
     setSelected((prev) => new Set(prev).add(article.id));
-    toast({ message: t("{nom} sélectionné", { nom: article.designation }), duration: 1600, position: "top", cssClass: "rc-toast" });
+    const variante = varianteDuCode(article, code);
+    toast({ message: t("{nom} sélectionné", { nom: variante ? `${article.designation} (${variante})` : article.designation }), duration: 1600, position: "top", cssClass: "rc-toast" });
   };
 
   const toggle = (articleId: string) =>
@@ -64,11 +86,15 @@ export default function ArticlePickerModal({
       title={title}
       onWillPresent={() => {
         setQuery("");
+        setScannes([]);
         setSelected(new Set(selectedIds));
       }}
       onDismiss={onDismiss}
       toolbar={
-        <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, code…")} />
+        <>
+          <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />
+          <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />
+        </>
       }
       footer={
         <Button size="lg" block disabled={selected.size === 0} onClick={() => onConfirm(Array.from(selected))}>
@@ -79,8 +105,8 @@ export default function ArticlePickerModal({
       {filtered.length === 0 ? (
         <EmptyState icon={searchOutline} title={t("Aucun article trouvé.")} message={t("Essayez une autre désignation ou un code.")} />
       ) : (
-        <div role="group" aria-label={t("Articles")}>
-          {filtered.map((article) => {
+        <div ref={groupeRef} role="group" aria-label={t("Articles")}>
+          {liste.visibles.map((article) => {
             const isSelected = selected.has(article.id);
             return (
               <Row
@@ -93,8 +119,8 @@ export default function ArticlePickerModal({
                 title={article.designation}
                 meta={
                   <>
-                    {article.code}
-                    {article.unit ? ` · ${article.unit}` : ""} · {formatAmount(article.prixVente)} {t("TND")}
+                    {[article.code, article.unit].filter(Boolean).map((x) => `${x} · `).join("")}
+                    {formatAmount(prixTTC(article))} {t("TND")}
                   </>
                 }
                 trailing={
@@ -108,6 +134,7 @@ export default function ArticlePickerModal({
               />
             );
           })}
+          <ChargerPlus reste={liste.reste} onPlus={liste.plus} />
         </div>
       )}
     </Sheet>

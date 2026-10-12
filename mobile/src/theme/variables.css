@@ -37,6 +37,8 @@
   --rc-positive-soft: #e2eee6;
   --rc-warning: #94570a;
   --rc-warning-soft: #f8ebd6;
+  --rc-info: #1f5aa6;
+  --rc-info-soft: #e1ebf8;
   --rc-danger: #b0352a;
   --rc-danger-soft: #f7e2de;
 
@@ -197,6 +199,8 @@
     --rc-positive-soft: #1c2c23;
     --rc-warning: #e3ae57;
     --rc-warning-soft: #33291a;
+    --rc-info: #8db6ec;
+    --rc-info-soft: #1b2837;
     --rc-danger: #f08a7e;
     --rc-danger-soft: #3a211e;
 

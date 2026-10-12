@@ -1,8 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { ORDRE_CATALOGUE } from "../lib/ordreArticles";
 import { ciblesDeLaSociete, requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { plageDates } from "../utils/plage";
+import { ajouterLot, dateEnTexte, dateExpirationSchema, joursRestants, synchroniserLots } from "../lib/lotsDepot";
+import { comparerOrdreCatalogue } from "../lib/ordreArticles";
+import { noterPrix } from "../lib/historiquePrix";
+import { htDepuisMarge } from "../lib/tarifs";
 
 export const stockRouter = Router();
 // Tout le module stock est réservé à l'admin : le vendeur ne doit pas connaître
@@ -35,8 +40,8 @@ stockRouter.get("/camion", async (req, res) => {
   if (!vendeurId) return res.status(400).json({ error: "vendeurId requis" });
   const stock = await prisma.stockCamion.findMany({
     where: { vendeurId },
-    include: { article: true },
-    orderBy: { article: { designation: "asc" } },
+    include: { article: { include: { codesBarres: { select: { codeBarre: true, libelle: true } } } } },
+    orderBy: ORDRE_CATALOGUE.map((o) => ({ article: o })),
   });
   res.json(stock);
 });
@@ -186,19 +191,39 @@ stockRouter.get("/numero-suivant", async (req, res) => {
 // ---------------------------------------------------------------- Dépôt
 
 // Tous les articles actifs avec leur quantité au dépôt (0 si jamais reçue).
+// `aConfirmer` : article qui n'a jamais eu de stock et dont l'admin n'a pas encore
+// confirmé qu'il n'en a réellement pas (écran « À compléter »).
 stockRouter.get("/depot", async (req, res) => {
   const articles = await prisma.article.findMany({
     where: { deletedAt: null, societeId: req.societeId },
-    include: { stockDepot: true },
-    orderBy: { designation: "asc" },
+    include: { stockDepot: true, codesBarres: { select: { codeBarre: true, libelle: true } } },
+    orderBy: ORDRE_CATALOGUE,
   });
   res.json(
     articles.map(({ stockDepot, ...article }) => ({
       articleId: article.id,
       quantite: Number(stockDepot?.quantite ?? 0),
+      aConfirmer: !stockDepot && !article.stockVerifieAt,
       article,
     }))
   );
+});
+
+const confirmerSchema = z.object({ articleIds: z.array(z.string().uuid()).min(1).max(5000) });
+
+// L'admin confirme que ces articles n'ont réellement aucun stock au dépôt.
+stockRouter.post("/depot/sans-stock-confirme", async (req, res) => {
+  const parsed = confirmerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const { count } = await prisma.article.updateMany({
+      where: { id: { in: parsed.data.articleIds }, societeId: req.societeId, deletedAt: null },
+      data: { stockVerifieAt: new Date() },
+    });
+    res.json({ confirmes: count });
+  } catch (err) {
+    return serverError(res, err);
+  }
 });
 
 stockRouter.get("/depot/mouvements", async (req, res) => {
@@ -213,7 +238,18 @@ stockRouter.get("/depot/mouvements", async (req, res) => {
 
 const entreeSchema = z.object({
   reference: z.string().max(120).optional(),
-  lignes: z.array(ligneQuantiteSchema).min(1),
+  // dateExpiration : date d'expiration des pièces reçues sur la ligne (facultative).
+  // prixAchat : nouveau prix d'achat HT facturé par le fournisseur ; prixVente : nouveau prix de vente HT
+  // (par défaut, la marge actuelle de l'article est conservée).
+  lignes: z
+    .array(
+      ligneQuantiteSchema.extend({
+        dateExpiration: dateExpirationSchema.nullish(),
+        prixAchat: z.number().nonnegative().optional(),
+        prixVente: z.number().nonnegative().optional(),
+      }),
+    )
+    .min(1),
 });
 
 // Réception de marchandise au dépôt (livraison fournisseur, stock initial).
@@ -236,7 +272,28 @@ stockRouter.post("/depot/entree", async (req, res) => {
           create: { articleId: l.articleId, quantite: unites },
           update: { quantite: { increment: unites } },
         });
-        await tx.ligneEntreeDepot.create({ data: { entreeId: doc.id, articleId: l.articleId, quantite: unites } });
+        await tx.ligneEntreeDepot.create({
+          data: {
+            entreeId: doc.id,
+            articleId: l.articleId,
+            quantite: unites,
+            dateExpiration: l.dateExpiration ?? null,
+            prixAchat: l.prixAchat ?? null,
+          },
+        });
+        if (l.prixAchat !== undefined || l.prixVente !== undefined) {
+          const achat = l.prixAchat ?? Number(article.prixAchat);
+          const tva = Number(article.tva);
+          const fodec = Number(article.fodec);
+          // Sans prix de vente saisi : la marge actuelle (en % du prix d'achat) est conservée.
+          const margeActuelle = Number(article.prixAchat) > 0 ? (Number(article.prixVente) / Number(article.prixAchat) - 1) * 100 : null;
+          const vente =
+            l.prixVente ??
+            (l.prixAchat !== undefined && margeActuelle !== null ? htDepuisMarge(achat, margeActuelle, tva, fodec) : Number(article.prixVente));
+          const maj = await tx.article.update({ where: { id: article.id }, data: { prixAchat: achat, prixVente: vente } });
+          await noterPrix(tx, article.id, maj, article, "ENTREE", { entreeId: doc.id, adminId: req.user!.id });
+        }
+        await ajouterLot(tx, l.articleId, l.dateExpiration ?? null, unites, doc.id);
         await tx.mouvementDepot.create({
           data: { articleId: l.articleId, sens: "ENTREE", quantite: unites, reference: data.reference, entreeId: doc.id },
         });
@@ -303,6 +360,8 @@ stockRouter.post("/chargement", async (req, res) => {
           create: { articleId: l.articleId, quantite: signeDepot * unites },
           update: { quantite: { increment: signeDepot * unites } },
         });
+        // Chargement : FEFO (les dates les plus proches partent). Retour : pièces sans date.
+        await synchroniserLots(tx, l.articleId);
         await tx.stockCamion.upsert({
           where: { vendeurId_articleId: { vendeurId, articleId: l.articleId } },
           create: { vendeurId, articleId: l.articleId, quantite: -signeDepot * unites },
@@ -330,6 +389,149 @@ stockRouter.post("/chargement", async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     if (err instanceof StockError) return res.status(409).json({ error: err.message });
+    return serverError(res, err);
+  }
+});
+
+// ---------------------------------------------------------------- Dates d'expiration (lots du dépôt)
+
+const ALERTE_PAR_DEFAUT = 30;
+
+/** Article suivi pour la péremption ? Sa catégorie (ou la principale qui la contient) le dit. */
+async function reglesPeremption(societeId: string) {
+  const cats = await prisma.categorie.findMany({ where: { societeId }, select: { id: true, parentId: true, perissable: true, alerteJours: true } });
+  const parId = new Map(cats.map((c) => [c.id, c]));
+  return (categorieId: string | null) => {
+    const c = categorieId ? parId.get(categorieId) : undefined;
+    const parent = c?.parentId ? parId.get(c.parentId) : undefined;
+    const source = c?.perissable ? c : parent?.perissable ? parent : undefined;
+    // Une sous-catégorie sans délai propre reprend celui de sa catégorie principale.
+    return source ? { alerteJours: c?.alerteJours ?? source.alerteJours ?? parent?.alerteJours ?? ALERTE_PAR_DEFAUT } : null;
+  };
+}
+
+// Tableau de bord des péremptions : lots datés (expirés / à surveiller) et articles périssables
+// dont des pièces n'ont pas encore de date.
+stockRouter.get("/depot/peremption", async (req, res) => {
+  try {
+    const [regle, lots] = await Promise.all([
+      reglesPeremption(req.societeId!),
+      prisma.lotDepot.findMany({
+        where: { quantite: { gt: 0 }, article: { societeId: req.societeId, deletedAt: null, sansPeremption: false } },
+        include: { article: { include: { codesBarres: { select: { codeBarre: true, libelle: true } } } } },
+      }),
+    ]);
+
+    const dates: Array<Record<string, unknown> & { joursRestants: number }> = [];
+    const sansDate = new Map<string, { article: (typeof lots)[number]["article"]; quantite: number }>();
+    let expires = 0;
+    let proches = 0;
+    for (const lot of lots) {
+      const r = regle(lot.article.categorieId);
+      if (!r) continue;
+      if (!lot.dateExpiration) {
+        const cur = sansDate.get(lot.articleId);
+        sansDate.set(lot.articleId, { article: lot.article, quantite: (cur?.quantite ?? 0) + Number(lot.quantite) });
+        continue;
+      }
+      const jours = joursRestants(lot.dateExpiration);
+      const statut = jours < 0 ? "EXPIRE" : jours <= r.alerteJours ? "PROCHE" : "OK";
+      if (statut === "EXPIRE") expires++;
+      else if (statut === "PROCHE") proches++;
+      dates.push({
+        id: lot.id,
+        articleId: lot.articleId,
+        article: lot.article,
+        dateExpiration: dateEnTexte(lot.dateExpiration),
+        quantite: Number(lot.quantite),
+        joursRestants: jours,
+        alerteJours: r.alerteJours,
+        statut,
+      });
+    }
+    dates.sort((a, b) => a.joursRestants - b.joursRestants);
+    const aDater = [...sansDate.values()]
+      .sort((a, b) => comparerOrdreCatalogue(a.article, b.article))
+      .map((s) => ({ articleId: s.article.id, article: s.article, quantiteSansDate: s.quantite }));
+
+    res.json({ resume: { expires, proches, aDater: aDater.length }, lots: dates, aDater });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+const daterSchema = z.object({
+  articleId: z.string().uuid(),
+  // Répartit tout ou partie des pièces « sans date » entre des dates.
+  lignes: z.array(z.object({ dateExpiration: dateExpirationSchema, quantite: z.number().positive() })).min(1),
+});
+
+stockRouter.post("/depot/lots/dater", async (req, res) => {
+  const parsed = daterSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { articleId, lignes } = parsed.data;
+  try {
+    const article = await prisma.article.findFirst({ where: { id: articleId, societeId: req.societeId, deletedAt: null }, select: { id: true } });
+    if (!article) return res.status(404).json({ error: "Article introuvable" });
+    await prisma.$transaction(async (tx) => {
+      const sansDate = await tx.lotDepot.findMany({ where: { articleId, dateExpiration: null, quantite: { gt: 0 } }, orderBy: { createdAt: "asc" } });
+      const dispo = sansDate.reduce((s, l) => s + Number(l.quantite), 0);
+      const demande = lignes.reduce((s, l) => s + l.quantite, 0);
+      if (demande > dispo + 1e-9) throw new StockError(`Seulement ${dispo} pièces sans date pour cet article.`);
+      let aPrendre = demande;
+      for (const lot of sansDate) {
+        if (aPrendre <= 1e-9) break;
+        const q = Number(lot.quantite);
+        const pris = Math.min(q, aPrendre);
+        aPrendre -= pris;
+        if (pris >= q) await tx.lotDepot.delete({ where: { id: lot.id } });
+        else await tx.lotDepot.update({ where: { id: lot.id }, data: { quantite: Math.round((q - pris) * 1000) / 1000 } });
+      }
+      for (const l of lignes) await ajouterLot(tx, articleId, l.dateExpiration, l.quantite);
+    });
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof StockError) return res.status(400).json({ error: err.message });
+    return serverError(res, err);
+  }
+});
+
+// Corriger la date d'un lot.
+stockRouter.put("/depot/lots/:id", async (req, res) => {
+  const parsed = z.object({ dateExpiration: dateExpirationSchema.nullable() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const maj = await prisma.lotDepot.updateMany({
+      where: { id: req.params.id, article: { societeId: req.societeId } },
+      data: { dateExpiration: parsed.data.dateExpiration },
+    });
+    if (maj.count === 0) return res.status(404).json({ error: "Lot introuvable" });
+    res.status(204).send();
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// Retirer des pièces d'un lot du dépôt (périmées, jetées, remises au fournisseur).
+stockRouter.post("/depot/lots/:id/retirer", async (req, res) => {
+  const parsed = z.object({ quantite: z.number().positive().optional(), reference: z.string().trim().max(120).optional() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const lot = await tx.lotDepot.findFirst({ where: { id: req.params.id, article: { societeId: req.societeId } } });
+      if (!lot) throw new StockError("Lot introuvable");
+      const q = Number(lot.quantite);
+      const retire = Math.min(parsed.data.quantite ?? q, q);
+      if (retire >= q) await tx.lotDepot.delete({ where: { id: lot.id } });
+      else await tx.lotDepot.update({ where: { id: lot.id }, data: { quantite: Math.round((q - retire) * 1000) / 1000 } });
+      await tx.stockDepot.update({ where: { articleId: lot.articleId }, data: { quantite: { decrement: retire } } });
+      await tx.mouvementDepot.create({
+        data: { articleId: lot.articleId, sens: "AJUSTEMENT", quantite: -retire, reference: parsed.data.reference || "Retrait de produits périmés" },
+      });
+    });
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof StockError) return res.status(404).json({ error: err.message });
     return serverError(res, err);
   }
 });

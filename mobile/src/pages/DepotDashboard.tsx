@@ -1,7 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { calendarOutline, closeCircle, cubeOutline, folderOpenOutline, hourglassOutline, pricetagOutline } from "ionicons/icons";
+import { useNavigate } from "react-router-dom";
+import { getPeremption } from "../api/stock";
+import type { Peremption } from "../types/lot";
 import type { StockDepotItem, VentesParArticle } from "../types/stock";
 import { formatAmount, formatColis, pieces } from "../utils/format";
-import { BarRanking, Group, Money, Notice, Row, Section, Segmented } from "../ui";
+import { BarRanking, Button, Group, Money, Notice, Row, Section, Segmented } from "../ui";
 import type { BarRankingItem } from "../ui/BarRanking";
 import { t, tn } from "../i18n";
 
@@ -14,9 +19,26 @@ const TAILLE = 5;
  * Tableau de bord du dépôt : valeur du stock (prix de vente et d'achat, HT)
  * et classements des articles les plus / moins en stock et vendus.
  */
-export default function DepotDashboard({ depot, ventes }: { depot: StockDepotItem[]; ventes: VentesParArticle | null }) {
+export default function DepotDashboard({
+  depot,
+  ventes,
+  avecCategories,
+}: {
+  depot: StockDepotItem[];
+  ventes: VentesParArticle | null;
+  /** La société a des catégories : les articles qui n'en ont pas sont signalés. */
+  avecCategories: boolean;
+}) {
+  const navigate = useNavigate();
   const [mesure, setMesure] = useState<Mesure>("stock");
   const [ordre, setOrdre] = useState<Ordre>("top");
+  const [peremption, setPeremption] = useState<Peremption["resume"] | null>(null);
+  // Recalculé quand le stock change (nouvelle réception, chargement…).
+  useEffect(() => {
+    getPeremption()
+      .then((p) => setPeremption(p.resume))
+      .catch(() => setPeremption(null));
+  }, [depot]);
 
   const valeurs = useMemo(() => {
     let vente = 0;
@@ -25,14 +47,23 @@ export default function DepotDashboard({ depot, ventes }: { depot: StockDepotIte
     // Articles en stock sans prix d'achat saisi : la valeur d'achat (et donc la
     // marge) serait sous-estimée, on le signale au lieu d'afficher une fausse marge.
     let sansPrixAchat = 0;
+    // Tous les articles sans prix d'achat (en stock ou non) et ceux à confirmer « sans stock » :
+    // ils s'ouvrent dans l'écran « À compléter ».
+    let sansPrixAchatTotal = 0;
+    let aConfirmer = 0;
+    let sansCategorie = 0;
     for (const d of depot) {
+      if (!d.article.categorieId) sansCategorie++;
       const q = Math.max(0, d.quantite);
+      const sansPrix = !(Number(d.article.prixAchat) > 0);
+      if (sansPrix) sansPrixAchatTotal++;
+      if (d.aConfirmer) aConfirmer++;
       if (q === 0) ruptures++;
-      else if (!(Number(d.article.prixAchat) > 0)) sansPrixAchat++;
+      else if (sansPrix) sansPrixAchat++;
       vente += q * Number(d.article.prixVente);
       achat += q * Number(d.article.prixAchat);
     }
-    return { vente, achat, marge: vente - achat, ruptures, sansPrixAchat };
+    return { vente, achat, marge: vente - achat, ruptures, sansPrixAchat, sansPrixAchatTotal, aConfirmer, sansCategorie };
   }, [depot]);
 
   const classement = useMemo<BarRankingItem[]>(() => {
@@ -86,7 +117,15 @@ export default function DepotDashboard({ depot, ventes }: { depot: StockDepotIte
         : t("Articles les moins vendus ({n} j)", { n: ventes?.jours ?? 30 });
 
   return (
-    <>
+    <div className="rc-grille">
+      {/* Le plan 3D du dépôt n'existe que sur le web (pas dans l'application du téléphone). */}
+      {!Capacitor.isNativePlatform() && (
+        <Section className="rc-span">
+          <Button variant="secondary" block icon={cubeOutline} onClick={() => navigate("/stock/entrepot")}>
+            {t("Voir l'entrepôt en 3D")}
+          </Button>
+        </Section>
+      )}
       <Section label={t("Valeur du dépôt")}>
         <Group>
           <Row compact label={t("Au prix de vente HT")} trailing={<Money value={valeurs.vente} size="lg" />} />
@@ -108,13 +147,44 @@ export default function DepotDashboard({ depot, ventes }: { depot: StockDepotIte
             />
           )}
         </Group>
-        {valeurs.sansPrixAchat > 0 && (
-          <Notice tone="warning">
+        {peremption && peremption.expires > 0 && (
+          <Notice tone="danger" icon={closeCircle} actionLabel={t("Voir")} onAction={() => navigate("/stock/peremptions")}>
+            {tn(peremption.expires, "{n} lot expiré au dépôt : à retirer.", "{n} lots expirés au dépôt : à retirer.")}
+          </Notice>
+        )}
+        {peremption && peremption.proches > 0 && (
+          <Notice tone="warning" icon={hourglassOutline} actionLabel={t("Voir")} onAction={() => navigate("/stock/peremptions")}>
+            {tn(peremption.proches, "{n} lot approche de sa date d'expiration.", "{n} lots approchent de leur date d'expiration.")}
+          </Notice>
+        )}
+        {peremption && peremption.aDater > 0 && (
+          <Notice tone="info" icon={calendarOutline} actionLabel={t("Dater")} onAction={() => navigate("/stock/peremptions")}>
+            {tn(peremption.aDater, "{n} article périssable sans date d'expiration.", "{n} articles périssables sans date d'expiration.")}
+          </Notice>
+        )}
+        {valeurs.sansPrixAchatTotal > 0 && (
+          <Notice tone="warning" icon={pricetagOutline} actionLabel={t("Compléter")} onAction={() => navigate("/stock/a-completer?vue=prix")}>
+            {valeurs.sansPrixAchat > 0
+              ? tn(
+                  valeurs.sansPrixAchat,
+                  "{n} article en stock sans prix d'achat : la valeur d'achat est incomplète et la marge n'est pas calculée.",
+                  "{n} articles en stock sans prix d'achat : la valeur d'achat est incomplète et la marge n'est pas calculée."
+                )
+              : tn(valeurs.sansPrixAchatTotal, "{n} article sans prix d'achat.", "{n} articles sans prix d'achat.")}
+          </Notice>
+        )}
+        {avecCategories && valeurs.sansCategorie > 0 && (
+          <Notice tone="warning" icon={folderOpenOutline} actionLabel={t("Classer")} onAction={() => navigate("/stock/a-completer?vue=categorie")}>
             {tn(
-              valeurs.sansPrixAchat,
-              "{n} article en stock sans prix d'achat : la valeur d'achat est incomplète et la marge n'est pas calculée.",
-              "{n} articles en stock sans prix d'achat : la valeur d'achat est incomplète et la marge n'est pas calculée."
+              valeurs.sansCategorie,
+              "{n} article sans catégorie : classez-le pour le retrouver plus vite.",
+              "{n} articles sans catégorie : classez-les pour les retrouver plus vite."
             )}
+          </Notice>
+        )}
+        {valeurs.aConfirmer > 0 && (
+          <Notice tone="info" icon={cubeOutline} actionLabel={t("Vérifier")} onAction={() => navigate("/stock/a-completer?vue=stock")}>
+            {tn(valeurs.aConfirmer, "{n} article sans stock à confirmer.", "{n} articles sans stock à confirmer.")}
           </Notice>
         )}
         {valeurs.ruptures > 0 && (
@@ -159,6 +229,6 @@ export default function DepotDashboard({ depot, ventes }: { depot: StockDepotIte
           </div>
         </div>
       </Section>
-    </>
+    </div>
   );
 }

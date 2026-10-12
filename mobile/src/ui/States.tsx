@@ -7,16 +7,18 @@ import { t } from "../i18n";
 interface NoticeProps {
   children: ReactNode;
   tone?: "danger" | "warning" | "info";
+  /** Icône propre à ce type d'alerte (sinon celle du ton). */
+  icon?: string;
   actionLabel?: string;
   onAction?: () => void;
 }
 
 const noticeIcon = { danger: alertCircle, warning: warning, info: informationCircle };
 
-export function Notice({ children, tone = "danger", actionLabel, onAction }: NoticeProps) {
+export function Notice({ children, tone = "danger", icon, actionLabel, onAction }: NoticeProps) {
   return (
     <div className={`rc-notice rc-notice--${tone}`} role={tone === "info" ? "status" : "alert"}>
-      <IonIcon icon={noticeIcon[tone]} aria-hidden="true" />
+      <IonIcon icon={icon ?? noticeIcon[tone]} aria-hidden="true" />
       <div className="rc-notice__body">{children}</div>
       {actionLabel && onAction && (
         <button type="button" className="rc-notice__action" onClick={onAction}>

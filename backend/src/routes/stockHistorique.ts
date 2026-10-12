@@ -1,6 +1,7 @@
 import { Router, type Response } from "express";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { synchroniserLots } from "../lib/lotsDepot";
 import { ciblesDeLaSociete, requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { plageDates } from "../utils/plage";
 
@@ -123,6 +124,8 @@ stockHistoriqueRouter.delete("/depot/entrees/:id", async (req, res) => {
           create: { articleId: l.articleId, quantite: -Number(l.quantite) },
           update: { quantite: { decrement: l.quantite } },
         });
+        // Les lots de cette réception partent en premier.
+        await synchroniserLots(tx, l.articleId, entree.id);
         await tx.mouvementDepot.create({
           data: {
             articleId: l.articleId,
@@ -270,6 +273,7 @@ stockHistoriqueRouter.delete("/chargements/:id", async (req, res) => {
           create: { articleId: l.articleId, quantite: versDepot * pieces },
           update: { quantite: { increment: versDepot * pieces } },
         });
+        await synchroniserLots(tx, l.articleId);
         await tx.stockCamion.upsert({
           where: { vendeurId_articleId: { vendeurId: ch.vendeurId, articleId: l.articleId } },
           create: { vendeurId: ch.vendeurId, articleId: l.articleId, quantite: -versDepot * pieces },

@@ -196,12 +196,13 @@ export default function InventaireDetail() {
   const r = inv?.resume;
   const nonComptes = r ? r.nbLignes - r.nbComptes : 0;
   const dejaListes = new Set(lignes.map((l) => l.articleId));
+  const depot = inv?.lieu === "DEPOT";
 
   return (
     <IonPage>
       <AppHeader
         backHref="/inventaires"
-        title={inv ? t("Camion de {nom}", { nom: inv.vendeur.nom }) : t("Inventaire")}
+        title={inv ? (inv.vendeur ? t("Camion de {nom}", { nom: inv.vendeur.nom }) : t("Dépôt")) : t("Inventaire")}
         eyebrow={inv ? t("Inventaire · {date}", { date: formatDateTime(inv.statut === "VALIDE" ? inv.dateValidation ?? inv.createdAt : inv.createdAt) }) : undefined}
       />
 
@@ -266,7 +267,7 @@ export default function InventaireDetail() {
                       ]
                 }
               />
-              <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, code…")} />
+              <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />
             </div>
 
             <Section flush>
@@ -282,7 +283,13 @@ export default function InventaireDetail() {
                           ? t("Aucun écart.")
                           : t("Aucun article compté.")
                   }
-                  message={filtre === "a_compter" && !q ? t("Validez l'inventaire pour mettre à jour le stock du camion.") : undefined}
+                  message={
+                    filtre === "a_compter" && !q
+                      ? depot
+                        ? t("Validez l'inventaire pour mettre à jour le stock du dépôt.")
+                        : t("Validez l'inventaire pour mettre à jour le stock du camion.")
+                      : undefined
+                  }
                 />
               ) : (
                 <div className="rc-list">
@@ -334,11 +341,16 @@ export default function InventaireDetail() {
             {!enCours && (
               <Section>
                 <p className="rc-footnote">
-                  {t("Stock du camion remplacé par les quantités comptées le {date} par {admin}. Valeur du manque calculée au prix de vente ({m} TND).", {
-                    date: formatDateTime(inv.dateValidation ?? inv.createdAt),
-                    admin: inv.admin.nom,
-                    m: formatAmount(r.valeurManque),
-                  })}
+                  {t(
+                    depot
+                      ? "Stock du dépôt remplacé par les quantités comptées le {date} par {admin}. Valeur du manque calculée au prix de vente ({m} TND)."
+                      : "Stock du camion remplacé par les quantités comptées le {date} par {admin}. Valeur du manque calculée au prix de vente ({m} TND).",
+                    {
+                      date: formatDateTime(inv.dateValidation ?? inv.createdAt),
+                      admin: inv.admin.nom,
+                      m: formatAmount(r.valeurManque),
+                    }
+                  )}
                 </p>
               </Section>
             )}
@@ -380,8 +392,8 @@ export default function InventaireDetail() {
 
       <PickerSheet
         isOpen={ajoutOpen}
-        title={t("Article trouvé dans le camion")}
-        searchPlaceholder={t("Désignation, marque, code…")}
+        title={depot ? t("Article trouvé dans le dépôt") : t("Article trouvé dans le camion")}
+        searchPlaceholder={t("Désignation, marque, réf…")}
         emptyLabel={t("Aucun article trouvé.")}
         onDismiss={() => setAjoutOpen(false)}
         onScan={(code) => articleParCode(catalogue, code)?.id}
@@ -395,7 +407,7 @@ export default function InventaireDetail() {
         options={catalogue.map((a) => ({
           value: a.id,
           label: a.designation,
-          meta: dejaListes.has(a.id) ? t("{code} · déjà dans la liste", { code: a.code }) : a.code,
+          meta: joinMeta([a.code, a.unit, dejaListes.has(a.id) && t("déjà dans la liste")]),
           keywords: articleMotsCles(a),
           leading: <ArticleImage src={a.img} alt="" />,
         }))}
@@ -405,9 +417,13 @@ export default function InventaireDetail() {
         isOpen={confirm === "valider"}
         onDidDismiss={() => setConfirm(null)}
         header={t("Valider l'inventaire ?")}
-        message={`Le stock du camion de ${inv?.vendeur.nom ?? ""} sera remplacé par les ${r?.nbComptes ?? 0} quantités comptées.${
+        message={`${
+          depot
+            ? t("Le stock du dépôt sera remplacé par les {n} quantités comptées.", { n: r?.nbComptes ?? 0 })
+            : t("Le stock du camion de {nom} sera remplacé par les {n} quantités comptées.", { nom: inv?.vendeur?.nom ?? "", n: r?.nbComptes ?? 0 })
+        }${
           nonComptes > 0 ? ` ${tn(nonComptes, "{n} article non compté garde la quantité de l'app.", "{n} articles non comptés gardent la quantité de l'app.")}` : ""
-        } Cette action est définitive.`}
+        } ${t("Cette action est définitive.")}`}
         buttons={[
           { text: t("Annuler"), role: "cancel" },
           { text: t("Valider"), handler: valider },
@@ -418,7 +434,7 @@ export default function InventaireDetail() {
         isOpen={confirm === "abandonner"}
         onDidDismiss={() => setConfirm(null)}
         header={t("Abandonner l'inventaire ?")}
-        message={t("Les comptages saisis seront supprimés. Le stock du camion n'est pas modifié.")}
+        message={depot ? t("Les comptages saisis seront supprimés. Le stock du dépôt n'est pas modifié.") : t("Les comptages saisis seront supprimés. Le stock du camion n'est pas modifié.")}
         buttons={[
           { text: t("Continuer l'inventaire"), role: "cancel" },
           { text: t("Abandonner"), role: "destructive", handler: abandonner },

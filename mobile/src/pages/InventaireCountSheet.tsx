@@ -63,7 +63,8 @@ export default function InventaireCountSheet({ ligne, saving, onSave, onRemove, 
                 {ligne.article.designation}
               </p>
               <p className="rc-row__meta">
-                {ligne.article.code} · {t("colis de {n}", { n: colisage })}
+                {ligne.article.code ? `${ligne.article.code} · ` : ""}
+                {t("colis de {n}", { n: colisage })}
               </p>
             </div>
           </div>

@@ -5,6 +5,7 @@ import type { Article } from "../types/article";
 import type { Facture } from "../types/facture";
 import { societeImprimee } from "./societe";
 import PdfPrinter from "../plugins/pdfPrinter";
+import { comparerCatalogue } from "./triArticles";
 
 export type TypeBon = "ENTREE" | "SORTIE" | "RETOUR";
 
@@ -127,14 +128,14 @@ export async function construireBonA4(bon: BonA4) {
     ligne("Matricule :", bon.vendeur.matriculeVoiture ?? "");
   }
 
-  const lignes = [...bon.lignes].sort((a, b) => a.article.code.localeCompare(b.article.code));
+  const lignes = [...bon.lignes].sort((a, b) => comparerCatalogue(a.article, b.article));
   const totalPieces = lignes.reduce((s, l) => s + l.pieces, 0);
   autoTable(doc, {
     startY: y + 2,
     margin: { left: marge, right: marge },
-    head: [["Code", "Désignation", "Colisage", "Qte", "PRIX"]],
+    head: [["Réf", "Désignation", "Colisage", "Qte", "PRIX"]],
     body: lignes.map((l) => [
-      l.article.code,
+      l.article.code ?? "",
       designation(l.article),
       String(Number(l.article.colisage) || 1),
       String(l.pieces),
@@ -217,11 +218,11 @@ export async function construireBonLivraisonA4(f: Facture) {
   autoTable(doc, {
     startY: y,
     margin: { left: marge, right: marge },
-    head: [["Code", "Désignation", "Qté", "P.U. HT", "TVA", "Total HT"]],
+    head: [["Réf", "Désignation", "Qté", "P.U. HT", "TVA", "Total HT"]],
     body: [...f.lignes]
-      .sort((a, b) => a.article.code.localeCompare(b.article.code))
+      .sort((a, b) => comparerCatalogue(a.article, b.article))
       .map((l) => [
-        l.article.code,
+        l.article.code ?? "",
         designation(l.article),
         String(Number(l.quantite)),
         prix(Number(l.prixUnitaire)),

@@ -184,7 +184,7 @@ export default function Dashboard() {
     }));
 
     return (
-      <>
+      <div className="rc-grille">
         <div className="rc-summary">
           <p className="rc-summary__label">
             {libellePeriode} · {t("Chiffre d'affaires TTC")}
@@ -327,7 +327,7 @@ export default function Dashboard() {
             <Row compact label={t("Total")} trailing={<Money value={d.stock.depot + d.stock.camions} size="lg" />} />
           </Group>
         </Section>
-      </>
+      </div>
     );
   };
 
