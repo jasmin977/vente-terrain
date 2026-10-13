@@ -11,6 +11,10 @@ import { formatAmount, formatDate, joinMeta, pieces } from "../../utils/format";
 import { compterCases, couleurCss, libelleStatut, ORDRE_STATUTS, pointsAttention, toneStatut } from "../../utils/statutEntrepot";
 import ArticleImage from "../ArticleImage";
 import RangerArticleSheet from "./RangerArticleSheet";
+import PanneauVentes, { BlocVentes } from "./PanneauVentes";
+import PanneauPeremption from "./PanneauPeremption";
+import { detailPeremption, libellePeremption, tonePeremption, type AnalysePeremption, type InfoPeremption, type StatutPeremption } from "../../utils/peremptionEntrepot";
+import { cleCase, type AnalyseVentes, type Metrique } from "../../utils/ventesEntrepot";
 import { Button, Field, Group, IconButton, Notice, Row, Segmented, Tag } from "../../ui";
 import { t, tn } from "../../i18n";
 
@@ -32,10 +36,19 @@ interface Props {
   onFiltre: (s: StatutStock | null) => void;
   /** Ouvre une case et amène la caméra dessus. */
   onVoirCase: (s: SelectionEntrepot) => void;
+  /** Mode « Ventes » : analyse de la période (null : mode stock). */
+  analyse: AnalyseVentes | null;
+  metrique: Metrique;
+  onSurligner: (cases: { rackId: string; niveau: number; travee: number }[]) => void;
+  /** Mode « Péremption » : analyse des dates d'expiration (null : autre mode). */
+  peremption: AnalysePeremption | null;
+  filtrePeremption: StatutPeremption | null;
+  onFiltrePeremption: (s: StatutPeremption | null) => void;
+  onOuvrirDates: () => void;
 }
 
 /** Ligne d'un produit rangé : prix, stock, statut (couleur du plan) et dernier réapprovisionnement. */
-function LigneProduit({ e, onClick }: { e: Emplacement; onClick?: () => void }) {
+function LigneProduit({ e, onClick, per }: { e: Emplacement; onClick?: () => void; per?: InfoPeremption }) {
   const a = e.article;
   const etiquette = a.statut === "NOUVEAU" ? (a.etiquette === "PROMOTION" ? t("Promotion") : t("Nouveau")) : libelleStatut(a.statut);
   return (
@@ -45,20 +58,31 @@ function LigneProduit({ e, onClick }: { e: Emplacement; onClick?: () => void }) 
       title={a.designation}
       meta={
         <>
-          <Tag tone={toneStatut(a.statut)} dot>
-            {etiquette}
-          </Tag>{" "}
-          {joinMeta([
-            t("{p} TND TTC", { p: formatAmount(a.prixTTC) }),
-            t("Stock {n}", { n: a.stock }),
-            a.derniereEntree ? t("Réappro. {d}", { d: formatDate(a.derniereEntree) }) : t("Jamais réapprovisionné"),
-          ])}
+          <span className="rc-ligne-produit__haut">
+            <span className="rc-qty">
+              <span className="rc-qty__n">{e.quantite}</span> {pieces(e.quantite)}
+            </span>
+            {per ? (
+              <Tag tone={tonePeremption(per.statut)} dot>
+                {libellePeremption(per.statut)}
+              </Tag>
+            ) : (
+              <Tag tone={toneStatut(a.statut)} dot>
+                {etiquette}
+              </Tag>
+            )}
+          </span>
+          {per && detailPeremption(per) && <span className="rc-ligne-produit__ligne">{detailPeremption(per)}</span>}
+          <span className="rc-ligne-produit__ligne">
+            {joinMeta([
+              t("{p} TND TTC", { p: formatAmount(a.prixTTC) }),
+              t("Stock {n}", { n: a.stock }),
+            ])}
+          </span>
+          <span className="rc-ligne-produit__ligne">
+            {a.derniereEntree ? t("Réappro. {d}", { d: formatDate(a.derniereEntree) }) : t("Jamais réapprovisionné")}
+          </span>
         </>
-      }
-      trailing={
-        <span className="rc-qty">
-          <span className="rc-qty__n">{e.quantite}</span> {pieces(e.quantite)}
-        </span>
       }
       onClick={onClick}
       chevron={Boolean(onClick)}
@@ -90,7 +114,7 @@ export default function PanneauEntrepot(p: Props) {
 
 /* ---------------------------------------------------------------- Résumé */
 
-function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto, onChange, onCree, onVoirCase }: Props) {
+function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto, onChange, onCree, onVoirCase, analyse, metrique, onSurligner, peremption, filtrePeremption, onFiltrePeremption, onOuvrirDates }: Props) {
   const { resume, racks } = data;
   const comptes = useMemo(() => compterCases(data), [data]);
   const attention = useMemo(() => pointsAttention(data), [data]);
@@ -119,8 +143,13 @@ function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto
 
   return (
     <>
-      <h2 className="rc-entrepot__titre">{t("Dépôt")}</h2>
-      <h3 className="rc-entrepot__sous-titre">{t("Stock en direct")}</h3>
+      <h2 className="rc-entrepot__titre">{analyse ? t("Ventes du dépôt") : peremption ? t("Dates d'expiration du dépôt") : t("Dépôt")}</h2>
+      {peremption && (
+        <PanneauPeremption data={data} analyse={peremption} filtre={filtrePeremption} onFiltre={onFiltrePeremption} onVoirCase={onVoirCase} onOuvrirDates={onOuvrirDates} />
+      )}
+      {analyse && <PanneauVentes data={data} analyse={analyse} metrique={metrique} onVoirCase={onVoirCase} onSurligner={onSurligner} />}
+      {!analyse && !peremption && <h3 className="rc-entrepot__sous-titre">{t("Stock en direct")}</h3>}
+      {!analyse && !peremption && (
       <Group>
         {ORDRE_STATUTS.map((s) => (
           <Row
@@ -138,7 +167,8 @@ function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto
           />
         ))}
       </Group>
-      {attention.total > 0 && (
+      )}
+      {!analyse && !peremption && attention.total > 0 && (
         <>
           <h3 className="rc-entrepot__sous-titre">{t("À traiter")}</h3>
           <Group>
@@ -163,10 +193,26 @@ function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto
           )}
         </>
       )}
+      {data.camions.length > 0 && (
+        <>
+          <h3 className="rc-entrepot__sous-titre">{t("Camions")}</h3>
+          <Group>
+            {data.camions.map((c) => (
+              <Row
+                key={c.vendeurId}
+                compact
+                chevron
+                title={c.nom}
+                meta={tn(c.stock.length, "{n} article", "{n} articles")}
+                onClick={() => onVoirCase({ type: "camion", vendeurId: c.vendeurId })}
+              />
+            ))}
+          </Group>
+        </>
+      )}
       <h3 className="rc-entrepot__sous-titre">{t("Plan")}</h3>
       <Group>
         <Row compact label={t("Étagères")} trailing={<span className="rc-row__value rc-num">{racks.length}</span>} />
-        <Row compact label={t("Camions")} trailing={<span className="rc-row__value rc-num">{data.camions.length}</span>} />
         <Row compact label={t("Articles en stock")} trailing={<span className="rc-row__value rc-num">{resume.stockArticles}</span>} />
         <Row compact label={t("Articles rangés sur le plan")} trailing={<span className="rc-row__value rc-num">{rangees}</span>} />
       </Group>
@@ -200,7 +246,7 @@ function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto
 
 /* ---------------------------------------------------------------- Case */
 
-function VueCase({ data, rack, niveau, travee, onChange, onSelect, onFocus }: Props & { rack: Rack; niveau: number; travee: number }) {
+function VueCase({ data, rack, niveau, travee, onChange, onSelect, onFocus, analyse, peremption }: Props & { rack: Rack; niveau: number; travee: number }) {
   const contenu = useMemo(() => rack.emplacements.filter((e) => e.niveau === niveau && e.travee === travee), [rack, niveau, travee]);
   const [ajout, setAjout] = useState(false);
   const [retrait, setRetrait] = useState<Emplacement | null>(null);
@@ -231,9 +277,20 @@ function VueCase({ data, rack, niveau, travee, onChange, onSelect, onFocus }: Pr
       ) : (
         <Group>
           {contenu.map((e) => (
-            <LigneProduit key={e.article.id} e={e} onClick={() => setQuantite(e)} />
+            <LigneProduit key={e.article.id} e={e} per={peremption?.parArticle.get(e.article.id)} onClick={() => setQuantite(e)} />
           ))}
         </Group>
+      )}
+      {analyse && analyse.parCase.get(cleCase(rack.id, niveau, travee)) && (
+        <>
+          <BlocVentes stats={analyse.parCase.get(cleCase(rack.id, niveau, travee))!.stats} jours={analyse.jours} />
+          {analyse.parCase.get(cleCase(rack.id, niveau, travee))!.lignes.map((l) => (
+            <p key={l.article.id} className="rc-footnote">
+              {l.article.designation} : {l.couverture === null ? t("aucune vente") : t("{n} j de stock", { n: Math.round(l.couverture) })}
+              {l.excedentValeur > 0 ? ` · ${t("{v} TND immobilisés", { v: formatAmount(l.excedentValeur) })}` : ""}
+            </p>
+          ))}
+        </>
       )}
       {erreur && <Notice>{erreur}</Notice>}
       <div className="rc-entrepot__actions">
@@ -289,7 +346,7 @@ function VueCase({ data, rack, niveau, travee, onChange, onSelect, onFocus }: Pr
 
 /* ---------------------------------------------------------------- Étagère */
 
-function VueRack({ rack, data, onChange, onSelect, onFocus }: Props & { rack: Rack }) {
+function VueRack({ rack, data, onChange, onSelect, onFocus, analyse, peremption }: Props & { rack: Rack }) {
   const [form, setForm] = useState({ nom: rack.nom, allee: rack.allee, x: String(rack.x), z: String(rack.z), niveaux: String(rack.niveaux), travees: String(rack.travees) });
   const [confirmer, setConfirmer] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -341,6 +398,7 @@ function VueRack({ rack, data, onChange, onSelect, onFocus }: Props & { rack: Ra
       <p className="rc-footnote">
         {tn(rack.niveaux, "{n} étage", "{n} étages")} · {tn(rack.travees, "{n} case de large", "{n} cases de large")} · {tn(articles, "{n} article rangé", "{n} articles rangés")}
       </p>
+      {analyse && analyse.parRack.get(rack.id) && <BlocVentes stats={analyse.parRack.get(rack.id)!} jours={analyse.jours} />}
       {rack.emplacements.length > 0 && (
         <>
           <h3 className="rc-entrepot__sous-titre">{t("Produits de l'étagère")}</h3>
@@ -348,7 +406,7 @@ function VueRack({ rack, data, onChange, onSelect, onFocus }: Props & { rack: Ra
             {[...rack.emplacements]
               .sort((a, b) => ORDRE_STATUTS.indexOf(a.article.statut) - ORDRE_STATUTS.indexOf(b.article.statut) || a.niveau - b.niveau || a.travee - b.travee)
               .map((e) => (
-                <LigneProduit key={`${e.niveau}:${e.travee}:${e.article.id}`} e={e} onClick={() => onSelect({ type: "case", rackId: rack.id, niveau: e.niveau, travee: e.travee })} />
+                <LigneProduit key={`${e.niveau}:${e.travee}:${e.article.id}`} e={e} per={peremption?.parArticle.get(e.article.id)} onClick={() => onSelect({ type: "case", rackId: rack.id, niveau: e.niveau, travee: e.travee })} />
               ))}
           </Group>
         </>
@@ -376,12 +434,14 @@ function VueRack({ rack, data, onChange, onSelect, onFocus }: Props & { rack: Ra
           <Field label={t("Cases de large")} type="number" inputMode="numeric" value={form.travees} onChange={(v) => maj("travees", v)} />
         </div>
         <Segmented
-          label={t("Sens de l'étagère")}
-          value={String(rack.rotation) as "0" | "90"}
-          onChange={(v) => void enregistrer({ rotation: v === "90" ? 90 : 0 })}
+          label={t("Face tournée vers")}
+          value={String(rack.rotation) as "0" | "90" | "180" | "270"}
+          onChange={(v) => void enregistrer({ rotation: Number(v) as 0 | 90 | 180 | 270 })}
           options={[
-            { value: "0", label: t("Dans la largeur") },
-            { value: "90", label: t("Dans la profondeur") },
+            { value: "0", label: t("Façade") },
+            { value: "90", label: t("Gauche") },
+            { value: "180", label: t("Fond") },
+            { value: "270", label: t("Droite") },
           ]}
         />
       </div>

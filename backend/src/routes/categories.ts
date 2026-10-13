@@ -53,6 +53,7 @@ categoriesRouter.get("/", async (req, res) => {
       nbArticles: nb.get(c.id) ?? 0,
       perissable: c.perissable,
       alerteJours: c.alerteJours,
+      froid: c.froid,
     })),
   );
 });
@@ -89,6 +90,8 @@ const modifierSchema = z.object({
   // Suivi des dates d'expiration ; alerteJours : délai d'alerte (null = 30 jours).
   perissable: z.boolean().optional(),
   alerteJours: z.number().int().min(1).max(730).nullable().optional(),
+  // Produits frais : rangés dans la chambre froide du dépôt.
+  froid: z.boolean().optional(),
 });
 
 categoriesRouter.put("/:id", requireAdmin, async (req, res) => {
@@ -112,7 +115,7 @@ categoriesRouter.put("/:id", requireAdmin, async (req, res) => {
     if ((nom !== cat.nom || parentId !== cat.parentId) && (await nomPris(req.societeId!, parentId, nom, cat.id))) {
       return res.status(409).json({ error: "Ce nom existe déjà à cet endroit" });
     }
-    const { ordre, perissable, alerteJours } = parsed.data;
+    const { ordre, perissable, alerteJours, froid } = parsed.data;
     const maj = await prisma.categorie.update({
       where: { id: cat.id },
       data: {
@@ -121,9 +124,10 @@ categoriesRouter.put("/:id", requireAdmin, async (req, res) => {
         ...(ordre !== undefined ? { ordre } : {}),
         ...(perissable !== undefined ? { perissable } : {}),
         ...(alerteJours !== undefined ? { alerteJours } : {}),
+        ...(froid !== undefined ? { froid } : {}),
       },
     });
-    res.json({ id: maj.id, nom: maj.nom, parentId: maj.parentId, ordre: maj.ordre, perissable: maj.perissable, alerteJours: maj.alerteJours });
+    res.json({ id: maj.id, nom: maj.nom, parentId: maj.parentId, ordre: maj.ordre, perissable: maj.perissable, alerteJours: maj.alerteJours, froid: maj.froid });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

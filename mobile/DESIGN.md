@@ -86,3 +86,4 @@ Rules:
 - Use `useEcranLarge()` (`ui/useMediaQuery.ts`) when behaviour — not only style — differs (back button, sheet vs dialog).
 - Native-only features need a web path or are hidden on the web: no camera scanner (a hardware scanner types the code + Enter, which `SearchField` treats as a scan; see `scanCameraDisponible()` in `lib/barcode.ts`); files/PDF → download or browser print; thermal ticket and OCR date reading are hidden, expiry dates are typed.
 - The 3D depot plan (`pages/Entrepot3D.tsx`, `entrepot3d/`) is web-only: the phone app hides its entry point (`Capacitor.isNativePlatform()`) and redirects `/stock/entrepot` to `/stock`.
+- With a mouse (`hover: hover` + `pointer: fine`) the side menu folds to a 68px icon rail when the cursor leaves it and unfolds over the page on hover or keyboard focus; the page stays put. Touch screens keep it unfolded.

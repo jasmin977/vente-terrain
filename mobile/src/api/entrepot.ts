@@ -1,5 +1,6 @@
 import { apiRequest } from "./client";
 import type { EntrepotData, GenerationInput, RackInput } from "../types/entrepot";
+import type { VentesEntrepot } from "../utils/ventesEntrepot";
 
 // Plan du dépôt en 3D : réservé à l'admin.
 
@@ -36,4 +37,9 @@ export function ranger(rackId: string, niveau: number, travee: number, articleId
 /** Range d'un coup les articles en stock sans emplacement, par catégorie. */
 export function rangerAuto(): Promise<{ ranges: number }> {
   return apiRequest<{ ranges: number }>("/entrepot/ranger-auto", { method: "POST", body: {} });
+}
+
+/** Ventes par article sur les `jours` derniers jours (carte de chaleur). */
+export function getVentesEntrepot(jours: number): Promise<VentesEntrepot> {
+  return apiRequest<VentesEntrepot>(`/entrepot/ventes?jours=${jours}`);
 }

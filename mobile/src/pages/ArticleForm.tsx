@@ -19,7 +19,7 @@ import CodesBarresAlternatifs from "../components/CodesBarresAlternatifs";
 import SelecteurCategorie from "../components/SelecteurCategorie";
 import { chemin } from "../utils/categories";
 import { useCategories } from "../utils/useCategories";
-import { ActionBar, AppHeader, Button, Field, Group, IconButton, Money, PageNotice, PickerField, Section, Segmented, SkeletonList, Tag } from "../ui";
+import { ActionBar, AppHeader, Button, Field, Group, IconButton, Money, PageNotice, PickerField, Section, Segmented, SkeletonList, Tag, useEcranLarge } from "../ui";
 import ChampDateExpiration from "../components/ChampDateExpiration";
 import { t } from "../i18n";
 
@@ -44,6 +44,7 @@ export default function ArticleForm() {
   const { id } = useParams<{ id: string }>();
   const isNew = id === "new";
   const navigate = useNavigate();
+  const web = useEcranLarge();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN";
   const router = useIonRouter();
@@ -577,7 +578,7 @@ export default function ArticleForm() {
 
             {canEdit && !isNew && <ArticleMouvements articleId={id!} />}
 
-            {canEdit && !isNew && (
+            {canEdit && !isNew && !web && (
               <Section className="rc-span">
                 <Button variant="danger" block icon={trashOutline} onClick={() => setConfirmDelete(true)} disabled={saving}>
                   {t("Supprimer l'article")}
@@ -601,9 +602,23 @@ export default function ArticleForm() {
 
       {canEdit && !loading && (
         <ActionBar hint={!form.codeBarre.trim() || !form.designation ? t("Code-barres et désignation sont obligatoires") : undefined}>
-          <Button size="lg" block loading={saving} disabled={!form.codeBarre.trim() || !form.designation} onClick={handleSave}>
-            {t("Enregistrer")}
-          </Button>
+          {web ? (
+            // Web : Enregistrer à gauche, Supprimer juste à côté.
+            <div className="rc-actionbar__row rc-actionbar__row--gauche">
+              <Button size="lg" loading={saving} disabled={!form.codeBarre.trim() || !form.designation} onClick={handleSave}>
+                {t("Enregistrer")}
+              </Button>
+              {!isNew && (
+                <Button size="lg" variant="danger" icon={trashOutline} onClick={() => setConfirmDelete(true)} disabled={saving}>
+                  {t("Supprimer l'article")}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Button size="lg" block loading={saving} disabled={!form.codeBarre.trim() || !form.designation} onClick={handleSave}>
+              {t("Enregistrer")}
+            </Button>
+          )}
         </ActionBar>
       )}
 

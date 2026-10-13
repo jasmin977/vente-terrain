@@ -9,7 +9,7 @@ export function createCategorie(nom: string, parentId?: string | null): Promise<
   return apiRequest<Categorie>("/categories", { method: "POST", body: { nom, parentId: parentId ?? null } });
 }
 
-export function updateCategorie(id: string, input: { nom?: string; parentId?: string | null; perissable?: boolean; alerteJours?: number | null }): Promise<Categorie> {
+export function updateCategorie(id: string, input: { nom?: string; parentId?: string | null; perissable?: boolean; alerteJours?: number | null; froid?: boolean }): Promise<Categorie> {
   return apiRequest<Categorie>(`/categories/${id}`, { method: "PUT", body: input });
 }
 

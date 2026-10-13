@@ -83,6 +83,7 @@ export default function Categories() {
                       tn(totalArticles(categories, racine.id), "{n} article", "{n} articles"),
                       enfants.length === 0 && t("Aucune sous-catégorie"),
                       racine.perissable && t("Dates suivies · alerte {n} j", { n: racine.alerteJours ?? 30 }),
+                      racine.froid && t("Produits frais · chambre froide"),
                     ])}
                     trailing={<IconButton icon={ellipsisHorizontal} label={t("Options de « {nom} »", { nom: racine.nom })} size="sm" onClick={() => setAction(racine)} />}
                   />
@@ -121,6 +122,10 @@ export default function Categories() {
                   handler: () => { void executer(() => updateCategorie(action.id, { perissable: !action.perissable })); },
                 },
                 ...(action.perissable ? [{ text: t("Délai d'alerte"), handler: () => { setDelai(action); } }] : []),
+                {
+                  text: action.froid ? t("Ne plus ranger dans la chambre froide") : t("Ranger dans la chambre froide"),
+                  handler: () => { void executer(() => updateCategorie(action.id, { froid: !action.froid })); },
+                },
               ]
             : []),
           { text: t("Supprimer"), role: "destructive" as const, handler: () => { if (action) setASupprimer(action); } },

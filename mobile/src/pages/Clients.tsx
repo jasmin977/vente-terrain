@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   IonContent,
@@ -24,6 +24,8 @@ import {
   Button,
   EmptyState,
   Fab,
+  FilterChip,
+  PickerSheet,
   FabSpacer,
   Money,
   PageNotice,
@@ -53,6 +55,9 @@ export default function Clients() {
   const [creditsLoading, setCreditsLoading] = useState(true);
   const [aPayer, setAPayer] = useState<{ facture: FactureCredit; client: CreditClient["client"] } | null>(null);
   const [avance, setAvance] = useState<{ clientId?: string } | null>(null);
+  // Filtre des crédits par vendeur (web et mobile) (celui qui a fait le bon de livraison).
+  const [vendeurFiltre, setVendeurFiltre] = useState("");
+  const [vendeurSheet, setVendeurSheet] = useState(false);
 
   // Ouverture directe sur les crédits (lien « Voir les crédits » du tableau de bord).
   const location = useLocation();
@@ -122,6 +127,23 @@ export default function Clients() {
 
   const firstLoad = loading && clients.length === 0;
 
+  const vendeursCredits = useMemo(() => {
+    const m = new Map<string, { id: string; nom: string; code: string }>();
+    for (const g of credits) for (const f of g.factures) m.set(f.vendeur.id, f.vendeur);
+    return [...m.values()].sort((a, b) => a.nom.localeCompare(b.nom));
+  }, [credits]);
+  const vendeurChoisi = vendeursCredits.find((v) => v.id === vendeurFiltre);
+  // Avec un vendeur choisi : seuls ses bons restent, et le total de chaque client suit.
+  const creditsAffiches = useMemo(() => {
+    if (!vendeurChoisi) return credits;
+    return credits
+      .map((g) => {
+        const factures = g.factures.filter((f) => f.vendeur.id === vendeurChoisi.id);
+        return { ...g, factures, totalDu: factures.reduce((s, f) => s + f.reste, 0) };
+      })
+      .filter((g) => g.factures.length > 0);
+  }, [credits, vendeurChoisi]);
+
   return (
     <IonPage>
       <AppHeader
@@ -146,6 +168,16 @@ export default function Clients() {
         ) : (
           <SearchField value={creditQuery} onChange={setCreditQuery} placeholder={t("Client ou N° de bon…")} />
         )}
+        {vue === "credits" && vendeursCredits.length > 1 && (
+          <div>
+            <FilterChip
+              label={vendeurChoisi ? vendeurChoisi.nom : t("Tous les vendeurs")}
+              active={Boolean(vendeurChoisi)}
+              ariaLabel={t("Filtrer par vendeur")}
+              onOpen={() => setVendeurSheet(true)}
+            />
+          </div>
+        )}
       </AppHeader>
 
       <IonContent>
@@ -162,7 +194,7 @@ export default function Clients() {
         {vue === "credits" ? (
           <>
             <CreditsList
-              credits={credits}
+              credits={creditsAffiches}
               loading={creditsLoading}
               query={creditQuery}
               onPayer={(facture, client) => setAPayer({ facture, client })}
@@ -230,6 +262,20 @@ export default function Clients() {
         clientId={avance?.clientId}
         onDismiss={() => setAvance(null)}
         onDone={apresEncaissement}
+      />
+      <PickerSheet
+        isOpen={vendeurSheet}
+        title={t("Vendeur")}
+        value={vendeurFiltre}
+        onDismiss={() => setVendeurSheet(false)}
+        onSelect={(v) => {
+          setVendeurFiltre(v);
+          setVendeurSheet(false);
+        }}
+        options={[
+          { value: "", label: t("Tous les vendeurs") },
+          ...vendeursCredits.map((v) => ({ value: v.id, label: v.nom, meta: v.code, keywords: v.code })),
+        ]}
       />
     </IonPage>
   );

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type Tone = "neutral" | "positive" | "warning" | "danger" | "accent" | "ink" | "info";
+export type Tone = "neutral" | "positive" | "warning" | "danger" | "accent" | "ink" | "info" | "violet";
 
 interface TagProps {
   tone?: Tone;

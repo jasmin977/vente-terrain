@@ -524,6 +524,8 @@ model Categorie {
   perissable  Boolean     @default(false)
   // Jours avant l'expiration où un lot est signalé (30 par défaut).
   alerteJours Int?
+  // Produits frais : rangés dans la chambre froide du dépôt (les sous-catégories héritent de leur catégorie).
+  froid       Boolean     @default(false)
 
   @@index([societeId, parentId])
   @@map("categories")

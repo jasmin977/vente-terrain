@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { IonIcon } from "@ionic/react";
 import {
+  business,
+  businessOutline,
   car,
   carOutline,
   chevronDown,
@@ -29,6 +31,8 @@ interface SousEntree {
   label: string;
   /** Écran à part (au lieu d'un paramètre d'adresse), ex. le plan 3D du dépôt. */
   chemin?: string;
+  /** Adresse complète de la sous-entrée (ex. « lieu=depot&vue=entrees ») quand elle règle plusieurs paramètres. */
+  requete?: string;
 }
 
 interface Entree {
@@ -51,6 +55,13 @@ const ecran = (chemin: string, pathname: string) => pathname === chemin || pathn
 const dansCatalogue = (pathname: string, params: URLSearchParams) =>
   (ecran("/stock", pathname) && (params.get("lieu") === "articles" ? pathname === "/stock" : pathname.startsWith("/stock/categories") || pathname.startsWith("/stock/a-completer"))) ||
   ecran("/articles", pathname);
+
+/** Les écrans du stock camion (liste, historique d'un article, chargement, retour) appartiennent à l'entrée « Camion ». */
+const dansCamion = (pathname: string, params: URLSearchParams) =>
+  pathname.startsWith("/stock/camion") ||
+  pathname.startsWith("/stock/chargement") ||
+  pathname.startsWith("/stock/retour") ||
+  (pathname.replace(/\/+$/, "") === "/stock" && params.get("lieu") === "camion");
 
 /**
  * Menu du web (à partir de 768 px) : remplace la barre d'onglets du téléphone. Les choix que le
@@ -86,16 +97,30 @@ export default function BarreLaterale() {
         livraison,
         clients,
         {
-          id: "stock",
-          label: t("Stock"),
+          id: "depot",
+          label: t("Dépôt"),
+          icon: businessOutline,
+          iconOn: business,
+          chemin: "/stock",
+          cle: "vue",
+          sous: [
+            { valeur: "stock", label: t("Stock"), requete: "lieu=depot&vue=stock" },
+            { valeur: "entrees", label: t("B° Entrée"), requete: "lieu=depot&vue=entrees" },
+            { valeur: "sorties", label: t("B° Sortie"), requete: "lieu=depot&vue=sorties" },
+            { valeur: "retours", label: t("B° Retour"), requete: "lieu=depot&vue=retours" },
+          ],
+        },
+        {
+          id: "camion",
+          label: t("Camion"),
           icon: carOutline,
           iconOn: car,
           chemin: "/stock",
-          cle: "lieu",
+          cle: "vue",
           sous: [
-            { valeur: "depot", label: t("Dépôt") },
-            { valeur: "camion", label: t("Camion") },
-            { valeur: "entrepot", label: t("Entrepôt 3D"), chemin: "/stock/entrepot" },
+            { valeur: "stock", label: t("Stock"), requete: "lieu=camion&vue=stock" },
+            { valeur: "chargements", label: t("Chargements"), requete: "lieu=camion&vue=chargements" },
+            { valeur: "retours", label: t("Retours"), requete: "lieu=camion&vue=retours" },
           ],
         },
         { id: "articles", label: t("Articles"), icon: cubeOutline, iconOn: cube, chemin: "/stock", parametre: "lieu=articles" },
@@ -117,13 +142,19 @@ export default function BarreLaterale() {
 
   const entreeActive = (e: Entree) => {
     if (e.id === "articles") return dansCatalogue(pathname, params);
-    if (e.id === "stock") return ecran("/stock", pathname) && !dansCatalogue(pathname, params);
+    if (e.id === "camion") return dansCamion(pathname, params);
+    if (e.id === "depot") return ecran("/stock", pathname) && !dansCatalogue(pathname, params) && !dansCamion(pathname, params);
     return ecran(e.chemin, pathname);
   };
   /** Sous-entrée courante : le paramètre d'adresse, ou la première par défaut. */
   const sousActive = (e: Entree, s: SousEntree) => {
     if (!e.cle || !e.sous) return false;
     if (s.chemin) return pathname.replace(/\/+$/, "") === s.chemin;
+    if (s.requete) {
+      // Sous-entrée courante : celle dont tous les paramètres sont dans l'adresse, sinon la première.
+      const correspond = (x: SousEntree) => Boolean(x.requete) && [...new URLSearchParams(x.requete)].every(([k, v]) => params.get(k) === v);
+      return pathname.replace(/\/+$/, "") === e.chemin && (e.sous.find(correspond) ?? e.sous[0]) === s;
+    }
     const valeur = params.get(e.cle);
     const courante = e.sous.some((x) => x.valeur === valeur) ? valeur : e.sous[0].valeur;
     return pathname.replace(/\/+$/, "") === e.chemin && s.valeur === courante;
@@ -131,7 +162,7 @@ export default function BarreLaterale() {
 
   const aller = (e: Entree, s?: SousEntree) => {
     if (s?.chemin) return navigate(s.chemin);
-    const requete = s && e.cle ? `?${e.cle}=${s.valeur}` : e.parametre ? `?${e.parametre}` : "";
+    const requete = s?.requete ? `?${s.requete}` : s && e.cle ? `?${e.cle}=${s.valeur}` : e.parametre ? `?${e.parametre}` : "";
     navigate(`${e.chemin}${requete}`);
   };
 
@@ -152,6 +183,8 @@ export default function BarreLaterale() {
               <button
                 type="button"
                 className={`rc-sidenav__entree${active ? " rc-sidenav__entree--active" : ""}`}
+                // Menu replié : le libellé est masqué, le bouton garde son nom pour les lecteurs d'écran.
+                aria-label={e.label}
                 aria-current={active && !e.sous ? "page" : undefined}
                 aria-expanded={e.sous ? deplie : undefined}
                 onClick={() => {

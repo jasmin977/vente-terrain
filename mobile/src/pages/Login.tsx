@@ -52,7 +52,7 @@ export default function Login() {
               <Field
                 label={t("Code")}
                 value={code}
-                onChange={setCode}
+                onChange={(v) => setCode(v.toUpperCase())}
                 autoCapitalize="characters"
                 autoComplete="username"
                 autoCorrect="off"

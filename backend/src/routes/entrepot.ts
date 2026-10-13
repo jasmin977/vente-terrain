@@ -44,6 +44,8 @@ entrepotRouter.get("/", async (req, res) => {
                   prixVente: true,
                   tva: true,
                   fodec: true,
+                  prixAchat: true,
+                  categorie: { select: { id: true, nom: true, parent: { select: { id: true, nom: true } } } },
                   stockMini: true,
                   etiquette: true,
                   etiquetteJusqua: true,
@@ -58,7 +60,12 @@ entrepotRouter.get("/", async (req, res) => {
       prisma.emplacementArticle.groupBy({ by: ["articleId"], where: { rack: { entrepotId: entrepot.id } }, _sum: { quantite: true } }),
       prisma.user.findMany({
         where: { societeId, role: "VENDEUR", actif: true },
-        select: { id: true, nom: true, code: true, stockCamion: { where: { quantite: { gt: 0 } }, select: { quantite: true } } },
+        select: {
+          id: true,
+          nom: true,
+          code: true,
+          stockCamion: { where: { quantite: { gt: 0 } }, select: { quantite: true, articleId: true, article: { select: { designation: true } } } },
+        },
         orderBy: { nom: "asc" },
       }),
     ]);
@@ -126,6 +133,9 @@ entrepotRouter.get("/", async (req, res) => {
                 statut: statutStock(entree, maintenant),
                 etiquette: etiquetteActive(entree, maintenant),
                 prixTTC: ttcDepuisHT(Number(a.prixVente), Number(a.tva), Number(a.fodec)),
+                prixAchat: Number(a.prixAchat),
+                // Catégorie principale (pour comparer les ventes par catégorie).
+                categorie: a.categorie ? { id: (a.categorie.parent ?? a.categorie).id, nom: (a.categorie.parent ?? a.categorie).nom } : null,
                 derniereEntree: derniereEntree.get(a.id)?.toISOString() ?? null,
               },
             };
@@ -137,6 +147,11 @@ entrepotRouter.get("/", async (req, res) => {
         code: c.code,
         nbArticles: c.stockCamion.length,
         totalPieces: c.stockCamion.reduce((s, l) => s + Number(l.quantite), 0),
+        // Les plus grosses lignes : de quoi remplir la caisse du camion dans la scène 3D (portière ouverte).
+        stock: [...c.stockCamion]
+          .sort((a, b) => Number(b.quantite) - Number(a.quantite))
+          .slice(0, 40)
+          .map((l) => ({ articleId: l.articleId, designation: l.article.designation, quantite: Number(l.quantite) })),
       })),
       resume: { stockArticles: stocks.length, stockPieces, nonRangeArticles, nonRangePieces },
       // Pour l'indicateur « en direct » du plan.
@@ -166,7 +181,7 @@ const rackSchema = z.object({
   allee: z.string().trim().min(1).max(20),
   x: z.number().min(-100).max(100),
   z: z.number().min(-100).max(100),
-  rotation: z.union([z.literal(0), z.literal(90)]).default(0),
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).default(0),
   niveaux: z.number().int().min(1).max(8),
   travees: z.number().int().min(1).max(12),
 });
@@ -213,14 +228,15 @@ entrepotRouter.delete("/racks/:id", async (req, res) => {
 });
 
 const genererSchema = z.object({
-  allees: z.number().int().min(1).max(8),
-  racksParRangee: z.number().int().min(1).max(8),
+  // Anciens paramètres (allées au centre) : acceptés mais ignorés, les étagères longent maintenant les murs.
+  allees: z.number().int().min(1).max(8).optional(),
+  racksParRangee: z.number().int().min(1).max(8).optional(),
   niveaux: z.number().int().min(1).max(8),
   travees: z.number().int().min(1).max(12),
   remplacer: z.boolean().default(false),
 });
 
-// Dispose automatiquement des allées d'étagères (et agrandit le bâtiment si besoin).
+// Dispose automatiquement les étagères le long des murs, centre libre (et agrandit le bâtiment si besoin).
 entrepotRouter.post("/generer", async (req, res) => {
   const parsed = genererSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Paramètres invalides" });
@@ -229,11 +245,11 @@ entrepotRouter.post("/generer", async (req, res) => {
     const e = await entrepotDe(req.societeId!);
     const existantes = await prisma.entrepotRack.count({ where: { entrepotId: e.id } });
     if (existantes > 0 && !o.remplacer) return res.status(409).json({ error: "Le dépôt a déjà des étagères : remplacer la disposition ?" });
-    const d = calculerDisposition({ allees: o.allees, racksParRangee: o.racksParRangee, travees: o.travees, largeurMin: e.largeur, profondeurMin: e.profondeur });
+    const d = calculerDisposition({ travees: o.travees, largeurMin: e.largeur, profondeurMin: e.profondeur });
     await prisma.$transaction([
       prisma.entrepotRack.deleteMany({ where: { entrepotId: e.id } }),
       prisma.entrepot.update({ where: { id: e.id }, data: { largeur: d.largeur, profondeur: d.profondeur } }),
-      prisma.entrepotRack.createMany({ data: d.racks.map((r) => ({ ...r, entrepotId: e.id, niveaux: o.niveaux, travees: o.travees })) }),
+      prisma.entrepotRack.createMany({ data: d.racks.map((r) => ({ ...r, entrepotId: e.id, niveaux: o.niveaux })) }),
     ]);
     res.status(201).json({ racks: d.racks.length });
   } catch (err) {
@@ -278,8 +294,17 @@ entrepotRouter.post("/ranger-auto", async (req, res) => {
     if (racks.length === 0) return res.status(409).json({ error: "Créez d'abord les étagères du dépôt" });
     const dejaRanges = new Set((await prisma.emplacementArticle.findMany({ where: { rack: { entrepotId: e.id } }, select: { articleId: true }, distinct: ["articleId"] })).map((x) => x.articleId));
     const articles = await prisma.article.findMany({
-      where: { societeId, deletedAt: null, stockDepot: { is: { quantite: { gt: 0 } } } },
-      include: { stockDepot: true, categorie: { select: { ordre: true, parentId: true, parent: { select: { ordre: true } } } } },
+      // Articles en stock, et vraies ruptures : un article qui a déjà eu du stock (mouvement de dépôt) ou été vendu garde
+      // sa place, que la case apparaisse en rouge quand il manque. Les articles du catalogue jamais stockés n'ont pas de place.
+      where: {
+        societeId,
+        deletedAt: null,
+        OR: [{ stockDepot: { is: { quantite: { gt: 0 } } } }, { mouvementsDepot: { some: {} } }, { lignesFacture: { some: {} } }],
+      },
+      include: {
+        stockDepot: true,
+        categorie: { select: { ordre: true, froid: true, parentId: true, parent: { select: { ordre: true, froid: true, parent: { select: { froid: true } } } } } },
+      },
       orderBy: ORDRE_CATALOGUE,
     });
     const aRanger = articles.filter((a) => !dejaRanges.has(a.id));
@@ -290,14 +315,79 @@ entrepotRouter.post("/ranger-auto", async (req, res) => {
         (a.categorie?.ordre ?? 1e9) - (b.categorie?.ordre ?? 1e9) ||
         (a.ordre ?? 1e9) - (b.ordre ?? 1e9),
     );
-    const cases = racks.flatMap((r) =>
-      Array.from({ length: r.niveaux }, (_, niveau) => Array.from({ length: r.travees }, (_, travee) => ({ rackId: r.id, niveau, travee }))).flat(),
-    );
+    const casesDe = (rs: typeof racks) =>
+      rs.flatMap((r) => Array.from({ length: r.niveaux }, (_, niveau) => Array.from({ length: r.travees }, (_, travee) => ({ rackId: r.id, niveau, travee }))).flat());
+    // Produits frais (catégorie « froid », ou héritée de ses parents) : chambre froide « Frigo » ; le reste dans le hall.
+    // Sans chambre froide sur le plan, tout se range ensemble.
+    const frigo = racks.filter((r) => r.allee === "Frigo");
+    const hall = racks.filter((r) => r.allee !== "Frigo");
+    const estFroid = (a: (typeof aRanger)[number]) => Boolean(a.categorie?.froid || a.categorie?.parent?.froid || a.categorie?.parent?.parent?.froid);
+    const groupes =
+      frigo.length > 0 && hall.length > 0
+        ? [
+            { articles: aRanger.filter(estFroid), cases: casesDe(frigo) },
+            { articles: aRanger.filter((a) => !estFroid(a)), cases: casesDe(hall) },
+          ]
+        : [{ articles: aRanger, cases: casesDe(racks) }];
     // Les cases d'un même étage se suivent le long d'un rack ; on remplit en répartissant les articles sur toutes les cases.
-    const parCase = Math.max(1, Math.ceil(aRanger.length / cases.length));
-    const lignes = aRanger.map((a, i) => ({ ...cases[Math.min(cases.length - 1, Math.floor(i / parCase))], articleId: a.id, quantite: a.stockDepot!.quantite }));
+    const lignes = groupes.flatMap(({ articles: liste, cases }) => {
+      if (liste.length === 0 || cases.length === 0) return [];
+      const parCase = Math.max(1, Math.ceil(liste.length / cases.length));
+      return liste.map((a, i) => ({ ...cases[Math.min(cases.length - 1, Math.floor(i / parCase))], articleId: a.id, quantite: a.stockDepot?.quantite ?? 0 }));
+    });
     if (lignes.length) await prisma.emplacementArticle.createMany({ data: lignes, skipDuplicates: true });
     res.json({ ranges: lignes.length });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// Ventes par article sur une période (carte de chaleur du plan 3D) : quantité, chiffre d'affaires TTC / HT et marge
+// brute HT (calculée avec le prix d'achat actuel ; sans prix d'achat, la marge n'est pas comptée). Bons validés
+// seulement, comme le tableau de bord.
+const ventesSchema = z.object({ jours: z.coerce.number().int().min(1).max(730).default(30) });
+
+entrepotRouter.get("/ventes", async (req, res) => {
+  const parsed = ventesSchema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "Période invalide (1 à 730 jours)" });
+  const { jours } = parsed.data;
+  try {
+    const fin = new Date();
+    const debut = new Date(fin.getTime() - jours * 86_400_000);
+    const lignes = await prisma.ligneFacture.groupBy({
+      by: ["articleId"],
+      where: { facture: { statut: "VALIDEE", deletedAt: null, date: { gte: debut, lte: fin }, vendeur: { societeId: req.societeId } } },
+      _sum: { quantite: true, montantHT: true, montantTTC: true },
+    });
+    const achats = new Map(
+      (await prisma.article.findMany({ where: { id: { in: lignes.map((l) => l.articleId) } }, select: { id: true, prixAchat: true } })).map((a) => [a.id, Number(a.prixAchat)]),
+    );
+    const arrondi = (n: number) => Math.round(n * 1000) / 1000;
+    const articles = lignes.map((l) => {
+      const quantite = Number(l._sum.quantite ?? 0);
+      const caHT = Number(l._sum.montantHT ?? 0);
+      const achat = achats.get(l.articleId) ?? 0;
+      return {
+        articleId: l.articleId,
+        quantite,
+        caHT: arrondi(caHT),
+        caTTC: arrondi(Number(l._sum.montantTTC ?? 0)),
+        // Sans prix d'achat saisi, la marge serait de 100 % : on ne la compte pas.
+        margeHT: achat > 0 ? arrondi(caHT - achat * quantite) : null,
+      };
+    });
+    res.json({
+      jours,
+      debut: debut.toISOString(),
+      fin: fin.toISOString(),
+      articles,
+      totaux: {
+        quantite: arrondi(articles.reduce((t, a) => t + a.quantite, 0)),
+        caHT: arrondi(articles.reduce((t, a) => t + a.caHT, 0)),
+        caTTC: arrondi(articles.reduce((t, a) => t + a.caTTC, 0)),
+        margeHT: arrondi(articles.reduce((t, a) => t + (a.margeHT ?? 0), 0)),
+      },
+    });
   } catch (err) {
     return serverError(res, err);
   }

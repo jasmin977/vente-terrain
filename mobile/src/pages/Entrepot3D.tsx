@@ -3,19 +3,28 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { IonAlert, IonContent, IonPage, useIonToast } from "@ionic/react";
 import { IonIcon } from "@ionic/react";
-import { carOutline, closeOutline, cubeOutline, footstepsOutline, refreshOutline, searchOutline, walkOutline } from "ionicons/icons";
-import { genererDisposition, getEntrepot, modifierBatiment, rangerAuto } from "../api/entrepot";
+import { bulb, bulbOutline, closeOutline, cubeOutline, footstepsOutline, refreshOutline, searchOutline, walkOutline } from "ionicons/icons";
+import { genererDisposition, getEntrepot, getVentesEntrepot, modifierBatiment, rangerAuto } from "../api/entrepot";
+import { getPeremption } from "../api/stock";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import PanneauEntrepot from "../components/entrepot/PanneauEntrepot";
 import { ScenEntrepot } from "../entrepot3d/ScenEntrepot";
 import type { EntrepotData, SelectionEntrepot, VueEntrepot } from "../types/entrepot";
 import { articleCorrespond } from "../utils/articleSearch";
-import { compterCases, couleurCss, libelleStatut, ORDRE_STATUTS, type StatutStock } from "../utils/statutEntrepot";
+import { compterCases, libelleStatut, type StatutStock } from "../utils/statutEntrepot";
+import { formatAmount } from "../utils/format";
+import { analyserVentes, DEGRADE_CHALEUR, type Metrique, type VentesEntrepot } from "../utils/ventesEntrepot";
+import { analyserPeremption, detailPeremption, libellePeremption, type AnalysePeremption, type StatutPeremption } from "../utils/peremptionEntrepot";
+import type { Peremption } from "../types/lot";
 import { AppHeader, Button, EmptyState, Field, IconButton, PageNotice, Sheet, Spinner, useEcranLarge, useMediaQuery } from "../ui";
 import { t } from "../i18n";
 
 type NomVue = "ensemble" | "dessus" | "interieur";
+
+/** Nom affiché d'un mur d'étagères (les anciennes « allées » A, B, C gardent leur nom). */
+const MURS: Record<string, string> = { Fond: "Fond", Droite: "Droite", Gauche: "Gauche", Façade: "Façade", Frigo: "Frigo" };
+const libelleMur = (allee: string) => (MURS[allee] ? t(MURS[allee]) : t("Allée {a}", { a: allee }));
 
 /**
  * Plan du dépôt en 3D (admin) : bâtiment, allées, étagères à étages et leur contenu, camions garés devant
@@ -41,8 +50,29 @@ export default function Entrepot3D() {
   const [webglIndisponible, setWebglIndisponible] = useState(false);
   // Couleurs de stock : toutes affichées, ou un seul statut mis en évidence (clic sur la légende).
   const [couleurs, setCouleurs] = useState(true);
+  // Nuit : l'interrupteur de la lumière du hall apparaît ; allumé, l'employé vient travailler.
+  const [nuit, setNuit] = useState(false);
+  const [lampe, setLampe] = useState(() => {
+    try {
+      return localStorage.getItem("rc-entrepot-lampe") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [filtre, setFiltre] = useState<StatutStock | null>(null);
   const [actualisation, setActualisation] = useState(false);
+  // Mode « Ventes » : carte de chaleur du chiffre d'affaires, de la marge ou du surstock sur une période.
+  const [mode, setMode] = useState<"stock" | "ventes" | "peremption">("stock");
+  const [jours, setJours] = useState(30);
+  const [metrique, setMetrique] = useState<Metrique>("ca");
+  const [ventes, setVentes] = useState<VentesEntrepot | null>(null);
+  const [surbrillance, setSurbrillance] = useState<{ rackId: string; niveau: number; travee: number }[]>([]);
+  const modeRef = useRef<"stock" | "ventes" | "peremption">("stock");
+  const [peremptionData, setPeremptionData] = useState<Peremption | null>(null);
+  const [filtrePeremption, setFiltrePeremption] = useState<StatutPeremption | null>(null);
+  const analysePerRef = useRef<AnalysePeremption | null>(null);
+  const chargerPeremptionRef = useRef<() => Promise<void>>(async () => undefined);
+  const chargerVentesRef = useRef<() => Promise<void>>(async () => undefined);
 
   const charger = useCallback(async () => {
     try {
@@ -61,7 +91,11 @@ export default function Entrepot3D() {
   // suivent les ventes, chargements et réceptions sans rien faire.
   useEffect(() => {
     const maj = () => {
-      if (document.visibilityState === "visible") void charger();
+      if (document.visibilityState === "visible") {
+        void charger();
+        if (modeRef.current === "ventes") void chargerVentesRef.current();
+        if (modeRef.current === "peremption") void chargerPeremptionRef.current();
+      }
     };
     const minuterie = setInterval(maj, 30_000);
     document.addEventListener("visibilitychange", maj);
@@ -71,9 +105,33 @@ export default function Entrepot3D() {
     };
   }, [charger]);
 
+  const chargerVentes = useCallback(async () => {
+    try {
+      setVentes(await getVentesEntrepot(jours));
+    } catch (err) {
+      setErreur(err instanceof ApiError ? err.message : t("Impossible de charger les données"));
+    }
+  }, [jours]);
+
+  const chargerPeremption = useCallback(async () => {
+    try {
+      setPeremptionData(await getPeremption());
+    } catch (err) {
+      setErreur(err instanceof ApiError ? err.message : t("Impossible de charger les données"));
+    }
+  }, []);
+  useEffect(() => {
+    if (mode === "peremption") void chargerPeremption();
+  }, [mode, chargerPeremption]);
+
+  // Les ventes se chargent à l'entrée du mode et à chaque changement de période, puis suivent le rythme du plan.
+  useEffect(() => {
+    if (mode === "ventes") void chargerVentes();
+  }, [mode, chargerVentes]);
+
   const actualiser = async () => {
     setActualisation(true);
-    await charger();
+    await Promise.all([charger(), mode === "ventes" ? chargerVentes() : Promise.resolve(), mode === "peremption" ? chargerPeremption() : Promise.resolve()]);
     setActualisation(false);
   };
 
@@ -82,7 +140,21 @@ export default function Entrepot3D() {
     if (!conteneur.current) return;
     let s: ScenEntrepot;
     try {
-      s = new ScenEntrepot({ conteneur: conteneur.current, surSelection: setSelection });
+      s = new ScenEntrepot({
+        conteneur: conteneur.current,
+        surSelection: setSelection,
+        surNuit: setNuit,
+        bulle: (e) => {
+          const a = e.article;
+          const etiquette = a.statut === "NOUVEAU" ? (a.etiquette === "PROMOTION" ? t("Promotion") : t("Nouveau")) : libelleStatut(a.statut);
+          const per = analysePerRef.current?.parArticle.get(a.id);
+          const lignes = [`${etiquette} · ${t("Stock {n}", { n: a.stock })}`, t("{p} TND TTC", { p: formatAmount(a.prixTTC) })];
+          // La quantité de la case n'apparaît que si elle diffère du stock (article en plusieurs cases, ou stock qui a bougé).
+          if (Math.abs(e.quantite - a.stock) > 1e-9) lignes.splice(1, 0, t("Dans la case : {n}", { n: e.quantite }));
+          if (per) lignes.push(`${libellePeremption(per.statut)}${detailPeremption(per) ? ` · ${detailPeremption(per)}` : ""}`);
+          return { titre: a.designation, lignes };
+        },
+      });
     } catch {
       setWebglIndisponible(true);
       return;
@@ -110,6 +182,15 @@ export default function Entrepot3D() {
   }, [selection]);
 
   useEffect(() => {
+    scene.current?.definirLampe(lampe);
+    try {
+      localStorage.setItem("rc-entrepot-lampe", lampe ? "1" : "0");
+    } catch {
+      /* stockage indisponible : le choix n'est simplement pas retenu */
+    }
+  }, [lampe]);
+
+  useEffect(() => {
     scene.current?.definirCouleurs(couleurs);
   }, [couleurs]);
 
@@ -118,6 +199,31 @@ export default function Entrepot3D() {
   }, [filtre, couleurs]);
 
   const comptes = useMemo(() => (data ? compterCases(data) : null), [data]);
+
+  const analyse = useMemo(() => (mode === "ventes" && data && ventes ? analyserVentes(data, ventes) : null), [mode, data, ventes]);
+  const chaleur = useMemo(() => (analyse ? analyse.chaleur(metrique) : null), [analyse, metrique]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    chargerVentesRef.current = chargerVentes;
+  }, [chargerVentes]);
+  useEffect(() => {
+    chargerPeremptionRef.current = chargerPeremption;
+  }, [chargerPeremption]);
+
+  const analysePeremption = useMemo(() => (mode === "peremption" && data && peremptionData ? analyserPeremption(data, peremptionData) : null), [mode, data, peremptionData]);
+  useEffect(() => {
+    analysePerRef.current = analysePeremption;
+  }, [analysePeremption]);
+  useEffect(() => {
+    scene.current?.definirPeremption(
+      analysePeremption ? { articles: analysePeremption.couleursArticles(filtrePeremption), racks: analysePeremption.couleursRacks(filtrePeremption) } : null,
+    );
+  }, [analysePeremption, filtrePeremption]);
+  useEffect(() => {
+    scene.current?.definirChaleur(chaleur ? { cases: chaleur.cases, racks: chaleur.racks } : null);
+  }, [chaleur]);
 
   // Échap quitte la marche à pied.
   useEffect(() => {
@@ -149,8 +255,8 @@ export default function Entrepot3D() {
 
   useEffect(() => {
     const cases = resultats.flatMap((r) => r.cases);
-    scene.current?.marquer(recherche.trim().length >= 2 ? cases : []);
-  }, [resultats, recherche, data]);
+    scene.current?.marquer(recherche.trim().length >= 2 ? cases : mode === "ventes" ? surbrillance : []);
+  }, [resultats, recherche, data, surbrillance, mode]);
 
   // Admin seulement, et sur le web seulement : l'application du téléphone n'a pas le plan 3D.
   if (Capacitor.isNativePlatform()) return <Navigate to="/stock" replace />;
@@ -192,11 +298,24 @@ export default function Entrepot3D() {
 
   return (
     <IonPage>
-      <AppHeader backHref={web ? undefined : "/stock"} title={t("Entrepôt 3D")} eyebrow={web ? t("Stock") : undefined} actions={undefined} />
+      {/* Web : pas d'en-tête, le plan prend tout l'écran (le menu latéral dit où l'on est). Petit écran : retour. */}
+      {!web && <AppHeader backHref="/stock" title={t("Entrepôt 3D")} />}
       <IonContent scrollY={false} className="rc-entrepot-page">
         {erreur && <PageNotice actionLabel={t("Réessayer")} onAction={() => void charger()}>{erreur}</PageNotice>}
         <div className="rc-entrepot">
           <div className="rc-entrepot__scene" ref={conteneur} />
+          {nuit && !webglIndisponible && (
+            <button
+              type="button"
+              className={`rc-entrepot__lampe${lampe ? " rc-entrepot__lampe--allumee" : ""}`}
+              aria-pressed={lampe}
+              aria-label={lampe ? t("Éteindre la lumière") : t("Allumer la lumière")}
+              title={lampe ? t("Éteindre la lumière") : t("Allumer la lumière")}
+              onClick={() => setLampe((v) => !v)}
+            >
+              <IonIcon icon={lampe ? bulb : bulbOutline} aria-hidden="true" />
+            </button>
+          )}
 
           {webglIndisponible && (
             <div className="rc-entrepot__vide">
@@ -227,7 +346,7 @@ export default function Entrepot3D() {
                   className={`rc-entrepot__puce${vue === `allee-${a}` && !marche ? " rc-entrepot__puce--on" : ""}`}
                   onClick={() => changerVue({ allee: a }, `allee-${a}`)}
                 >
-                  {t("Allée {a}", { a })}
+                  {libelleMur(a)}
                 </button>
               ))}
               <button type="button" className={`rc-entrepot__puce rc-entrepot__puce--marche${marche ? " rc-entrepot__puce--on" : ""}`} onClick={basculerMarche} aria-pressed={marche}>
@@ -235,6 +354,7 @@ export default function Entrepot3D() {
               </button>
             </div>
 
+            <div className="rc-entrepot__ligne">
             <div className="rc-entrepot__recherche">
               <Field
                 label={t("Où est cet article ?")}
@@ -268,31 +388,55 @@ export default function Entrepot3D() {
             </div>
           {/* Camions : accès rapide (aussi cliquables dans la scène). */}
           {data && comptes && (
-            <div className="rc-entrepot__legende" role="group" aria-label={t("Couleurs du stock")}>
-              <button
-                type="button"
-                className={`rc-entrepot__puce rc-entrepot__puce--petite${couleurs ? " rc-entrepot__puce--on" : ""}`}
-                aria-pressed={couleurs}
-                onClick={() => {
-                  setCouleurs((c) => !c);
-                  setFiltre(null);
-                }}
-              >
-                {couleurs ? t("Couleurs du stock") : t("Afficher les couleurs")}
-              </button>
-              {couleurs &&
-                ORDRE_STATUTS.map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    className={`rc-entrepot__puce rc-entrepot__puce--petite${filtre === st ? " rc-entrepot__puce--choisie" : ""}`}
-                    aria-pressed={filtre === st}
-                    onClick={() => setFiltre(filtre === st ? null : st)}
-                  >
-                    <span className="rc-entrepot__point" style={{ background: couleurCss(st) }} aria-hidden="true" />
-                    {libelleStatut(st)} <strong className="rc-num">{comptes[st]}</strong>
-                  </button>
-                ))}
+            <div className="rc-entrepot__legende" role="group" aria-label={t("Couleurs du plan")}>
+              {(
+                [
+                  ["stock", t("Stock")],
+                  ["ventes", t("Ventes")],
+                  ["peremption", t("Expiration")],
+                ] as ["stock" | "ventes" | "peremption", string][]
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`rc-entrepot__puce rc-entrepot__puce--petite${mode === m ? " rc-entrepot__puce--on" : ""}`}
+                  aria-pressed={mode === m}
+                  onClick={() => {
+                    setMode(m);
+                    setSurbrillance([]);
+                    setFiltrePeremption(null);
+                    if (m === "stock") setCouleurs(true);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              {mode === "ventes" && (
+                <>
+                  {([7, 30, 90, 365] as const).map((j) => (
+                    <button
+                      key={j}
+                      type="button"
+                      className={`rc-entrepot__puce rc-entrepot__puce--petite${jours === j ? " rc-entrepot__puce--choisie" : ""}`}
+                      aria-pressed={jours === j}
+                      onClick={() => setJours(j)}
+                    >
+                      {j === 365 ? t("12 mois") : t("{n} j", { n: j })}
+                    </button>
+                  ))}
+                  {(["ca", "marge", "surstock"] as Metrique[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`rc-entrepot__puce rc-entrepot__puce--petite${metrique === m ? " rc-entrepot__puce--on" : ""}`}
+                      aria-pressed={metrique === m}
+                      onClick={() => setMetrique(m)}
+                    >
+                      {m === "ca" ? t("Chiffre d'affaires") : m === "marge" ? t("Marge") : t("Surstock")}
+                    </button>
+                  ))}
+                </>
+              )}
               <button type="button" className="rc-entrepot__direct" onClick={() => void actualiser()} disabled={actualisation} aria-label={t("Actualiser le plan")}>
                 <span className="rc-entrepot__direct-point" aria-hidden="true" />
                 {t("En direct")} · {new Date(data.genereLe).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -300,19 +444,14 @@ export default function Entrepot3D() {
               </button>
             </div>
           )}
-
-          {data && data.camions.length > 0 && (
-            <div className="rc-entrepot__camions" role="group" aria-label={t("Camions")}>
-              {data.camions.map((c) => (
-                <button
-                  key={c.vendeurId}
-                  type="button"
-                  className={`rc-entrepot__puce${selection?.type === "camion" && selection.vendeurId === c.vendeurId ? " rc-entrepot__puce--on" : ""}`}
-                  onClick={() => choisir({ type: "camion", vendeurId: c.vendeurId })}
-                >
-                  <IonIcon icon={carOutline} aria-hidden="true" /> {c.nom}
-                </button>
-              ))}
+            </div>
+          {mode === "ventes" && (
+            <div className="rc-entrepot__echelle" aria-label={t("Échelle de la carte de chaleur")}>
+              <span className="rc-entrepot__degrade" style={{ background: DEGRADE_CHALEUR }} aria-hidden="true" />
+              <span className="rc-entrepot__echelle-bornes">
+                <span>{metrique === "surstock" ? t("Peu immobilisé") : t("Peu vendu")}</span>
+                <span>{metrique === "surstock" ? t("Beaucoup immobilisé") : t("Meilleures ventes")}</span>
+              </span>
             </div>
           )}
           </div>
@@ -359,6 +498,13 @@ export default function Entrepot3D() {
                 onRangerAuto={() => void rangerTout()}
                 onOuvrirCamion={() => navigate("/stock?lieu=camion")}
                 onCree={(id) => choisir({ type: "rack", rackId: id })}
+                analyse={analyse}
+                metrique={metrique}
+                peremption={analysePeremption}
+                filtrePeremption={filtrePeremption}
+                onFiltrePeremption={setFiltrePeremption}
+                onOuvrirDates={() => navigate("/stock/peremptions")}
+                onSurligner={setSurbrillance}
                 filtre={filtre}
                 onFiltre={(s) => {
                   setFiltre(s);
@@ -394,18 +540,18 @@ export default function Entrepot3D() {
 /* ---------------------------------------------------------------- Feuilles */
 
 function GenererSheet({ isOpen, existe, onDismiss, onFait }: { isOpen: boolean; existe: boolean; onDismiss: () => void; onFait: () => void | Promise<void> }) {
-  const [v, setV] = useState({ allees: "3", racksParRangee: "3", niveaux: "4", travees: "5" });
+  const [v, setV] = useState({ niveaux: "4", travees: "6" });
   const [confirmer, setConfirmer] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const n = (k: keyof typeof v) => Math.round(Number(v[k]));
-  const valide = (["allees", "racksParRangee", "niveaux", "travees"] as const).every((k) => n(k) >= 1) && n("allees") <= 8 && n("racksParRangee") <= 8 && n("niveaux") <= 8 && n("travees") <= 12;
+  const valide = (["niveaux", "travees"] as const).every((k) => n(k) >= 1) && n("niveaux") <= 8 && n("travees") <= 12;
 
   const lancer = async () => {
     setEnvoi(true);
     setErreur(null);
     try {
-      await genererDisposition({ allees: n("allees"), racksParRangee: n("racksParRangee"), niveaux: n("niveaux"), travees: n("travees"), remplacer: existe });
+      await genererDisposition({ niveaux: n("niveaux"), travees: n("travees"), remplacer: existe });
       await onFait();
     } catch (err) {
       setErreur(err instanceof ApiError ? err.message : t("Opération impossible"));
@@ -419,11 +565,7 @@ function GenererSheet({ isOpen, existe, onDismiss, onFait }: { isOpen: boolean; 
       <Sheet isOpen={isOpen} title={t("Disposition automatique")} height="auto" onDismiss={onDismiss}>
         <div className="rc-sheet__form">
           <div className="rc-fields">
-            <p className="rc-footnote">{t("Crée des allées d'étagères, deux rangées dos à dos de part et d'autre de chaque couloir. Le bâtiment s'agrandit si besoin.")}</p>
-            <div className="rc-fields__row">
-              <Field label={t("Allées")} type="number" inputMode="numeric" value={v.allees} onChange={(x) => setV((s) => ({ ...s, allees: x }))} hint="1 – 8" />
-              <Field label={t("Étagères par rangée")} type="number" inputMode="numeric" value={v.racksParRangee} onChange={(x) => setV((s) => ({ ...s, racksParRangee: x }))} hint="1 – 8" />
-            </div>
+            <p className="rc-footnote">{t("Place les étagères le long du fond et des côtés, et dans la chambre froide du coin ; la façade des portes et le centre restent libres. Le bâtiment s'agrandit si besoin.")}</p>
             <div className="rc-fields__row">
               <Field label={t("Étages")} type="number" inputMode="numeric" value={v.niveaux} onChange={(x) => setV((s) => ({ ...s, niveaux: x }))} hint="1 – 8" />
               <Field label={t("Cases de large")} type="number" inputMode="numeric" value={v.travees} onChange={(x) => setV((s) => ({ ...s, travees: x }))} hint="1 – 12" />

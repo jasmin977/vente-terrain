@@ -10,4 +10,6 @@ export interface Categorie {
   perissable?: boolean;
   /** Jours avant l'expiration où un lot est signalé (30 par défaut). */
   alerteJours?: number | null;
+  /** Produits frais : rangés dans la chambre froide du dépôt (hérité par les sous-catégories). */
+  froid?: boolean;
 }

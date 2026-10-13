@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { IonContent, IonPage, IonRefresher, IonRefresherContent, RefresherEventDetail, useIonViewWillEnter } from "@ionic/react";
 import {
   addOutline,
@@ -131,6 +131,13 @@ export default function Stock() {
   });
   const [vueDepot, setVueDepot] = useState<VueDepot>("stock");
   const [vueCamion, setVueCamion] = useState<VueCamion>("stock");
+  // Web : Stock / Bons d'entrée, de sortie, de retour (dépôt) et Stock / Chargements / Retours (camion) se choisissent aussi dans le menu (?vue=…).
+  const { search: adresse } = useLocation();
+  useVueUrl("/stock", "vue", ["stock", "entrees", "sorties", "retours", "chargements"] as const, (v) => {
+    if (new URLSearchParams(adresse).get("lieu") === "camion") {
+      if (v === "stock" || v === "chargements" || v === "retours") setVueCamion(v);
+    } else if (v !== "chargements") setVueDepot(v);
+  });
   /** Chargements et mouvements du camion : 0 = mois en cours, -1 = mois précédent… */
   const [decalageMois, setDecalageMois] = useState(0);
   const [query, setQuery] = useState("");
@@ -575,7 +582,7 @@ export default function Stock() {
           </PageNotice>
         )}
 
-        {!camionSansVendeur && lieu !== "articles" && (
+        {!web && !camionSansVendeur && lieu !== "articles" && (
           <div className="rc-period">
             {lieu === "depot" ? (
               <Segmented

@@ -191,11 +191,65 @@
     inset-inline-end: max(var(--rc-gutter), calc((100% - var(--rc-web-max)) / 2 + var(--rc-gutter)));
   }
 
-  .rc-actionbar > .rc-btn,
+  /* Boutons : jamais à la largeur de la fenêtre. Ils prennent la largeur de leur texte et s'alignent à gauche,
+     dans la colonne du contenu (les feuilles / boîtes de dialogue et le panneau du plan 3D gardent leur pleine largeur). */
+  .rc-actionbar > .rc-btn {
+    align-self: flex-start;
+    width: auto;
+    min-width: 220px;
+    max-width: 360px;
+    margin-inline: 0;
+  }
+
   .rc-actionbar__row {
-    max-width: 520px;
-    margin-inline: auto;
+    width: auto;
+    margin-inline: 0;
+    justify-content: flex-start;
+  }
+
+  .rc-actionbar__row > .rc-btn {
+    flex: 0 0 auto;
+    min-width: 170px;
+  }
+
+  .rc-actionbar__hint {
+    text-align: start;
+  }
+
+  .rc-btn--block {
+    display: inline-flex;
+    width: auto;
+    min-width: 200px;
+    max-width: 100%;
+    align-self: flex-start;
+    justify-self: start;
+  }
+
+  ion-modal .rc-btn--block,
+  .rc-login__form .rc-btn--block,
+  .rc-entrepot__panneau .rc-btn--block {
+    display: flex;
     width: 100%;
+    align-self: stretch;
+  }
+
+  ion-modal .rc-actionbar > .rc-btn {
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+  }
+
+  /* Barre d'actions alignée à gauche (ex. Enregistrer + Supprimer sur la fiche article). */
+  .rc-actionbar__row.rc-actionbar__row--gauche {
+    max-width: none;
+    margin-inline: 0;
+    width: auto;
+    justify-content: flex-start;
+  }
+
+  .rc-actionbar__row--gauche > .rc-btn {
+    flex: 0 0 auto;
+    min-width: 170px;
   }
 
   /* Listes pleine largeur du mobile : sur le web, des cartes dans la colonne. */
@@ -404,5 +458,55 @@
     border-radius: var(--rc-radius-lg);
     background: var(--rc-surface);
     box-shadow: 0 0 0 1px var(--rc-line), var(--rc-elev-float);
+  }
+}
+
+/* ---------- Menu latéral replié (souris) ---------- */
+/* Avec une souris, le menu se réduit à ses icônes dès que le curseur s'en éloigne et se déploie au survol
+   (ou au focus clavier) : il passe par-dessus la page, qui ne bouge pas. Sur écran tactile, il reste déployé. */
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  :root {
+    --rc-sidenav-rail: 68px;
+  }
+
+  ion-tabs {
+    inset-inline: var(--rc-sidenav-rail) 0;
+  }
+
+  .rc-sidenav {
+    width: var(--rc-sidenav-rail);
+    overflow-x: hidden;
+    transition:
+      width var(--rc-dur-base) var(--rc-ease),
+      box-shadow var(--rc-dur-base) var(--rc-ease);
+  }
+
+  .rc-sidenav:hover,
+  .rc-sidenav:has(:focus-visible) {
+    width: var(--rc-sidenav-w);
+    box-shadow: var(--rc-elev-float);
+  }
+
+  /* Replié : seulement les icônes (le nom, les libellés, les chevrons et les sous-menus apparaissent au survol). */
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__nom,
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__libelle,
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__chevron,
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__sous {
+    display: none;
+  }
+
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__entree {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__brand {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  /* Les écrans pleine fenêtre (plan 3D) et les en-têtes se calent sur le menu replié. */
+  .rc-fab {
+    transition: none;
   }
 }

@@ -15,6 +15,10 @@ export interface ArticleRange {
   /** Mise en avant en cours (bleu). */
   etiquette: "NOUVEAU" | "PROMOTION" | null;
   prixTTC: number;
+  /** Prix d'achat HT (marge et valeur du stock). */
+  prixAchat: number;
+  /** Catégorie principale (comparaison des ventes par catégorie). */
+  categorie: { id: string; nom: string } | null;
   /** Dernier bon d'entrée de l'article (ISO), null : jamais réapprovisionné. */
   derniereEntree: string | null;
 }
@@ -35,7 +39,7 @@ export interface Rack {
   x: number;
   z: number;
   /** 0 : longueur le long de l'axe x ; 90 : le long de l'axe z. */
-  rotation: 0 | 90;
+  rotation: 0 | 90 | 180 | 270;
   niveaux: number;
   travees: number;
   emplacements: Emplacement[];
@@ -47,6 +51,8 @@ export interface CamionEntrepot {
   code: string;
   nbArticles: number;
   totalPieces: number;
+  /** Les plus grosses lignes du stock du camion (au plus 40). */
+  stock: { articleId: string; designation: string; quantite: number }[];
 }
 
 export interface EntrepotData {
@@ -70,14 +76,15 @@ export interface RackInput {
   allee: string;
   x: number;
   z: number;
-  rotation: 0 | 90;
+  rotation: 0 | 90 | 180 | 270;
   niveaux: number;
   travees: number;
 }
 
 export interface GenerationInput {
-  allees: number;
-  racksParRangee: number;
+  /** Anciens paramètres (allées au centre) : ignorés, les étagères longent les murs. */
+  allees?: number;
+  racksParRangee?: number;
   niveaux: number;
   travees: number;
   remplacer: boolean;
