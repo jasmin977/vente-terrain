@@ -1,0 +1,15 @@
+{
+  "name": "collecte",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Application légère du PDA : collecte d'articles scannés, importée ensuite dans les formulaires du PC.",
+  "scripts": {
+    "build": "vite build --config vite.config.ts",
+    "apk": "vite build --config vite.config.ts && npx cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "8.2.1",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2"
+  }
+}

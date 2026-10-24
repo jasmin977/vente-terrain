@@ -13,6 +13,8 @@ export function effetCamion(m: Pick<MouvementStock, "sens" | "quantite">): numbe
 export type UniteSaisie = "COLIS" | "UNITE";
 
 export interface StockCamionItem {
+  /** Date d'expiration la plus proche du même article au dépôt (les lots ne sont pas suivis dans le camion). */
+  prochaineExpiration?: string | null;
   id: string;
   vendeurId: string;
   articleId: string;
@@ -26,6 +28,10 @@ export interface StockDepotItem {
   quantite: number;
   /** Jamais eu de stock et pas encore confirmé « sans stock » (écran « À compléter »). */
   aConfirmer: boolean;
+  /** Date d'expiration du lot qui expire en premier (AAAA-MM-JJ), null : aucun lot daté. */
+  prochaineExpiration?: string | null;
+  /** Pièces qui expirent à cette date. */
+  quantiteExpiration?: number | null;
   article: Article;
 }
 

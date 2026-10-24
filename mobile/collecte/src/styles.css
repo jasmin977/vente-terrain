@@ -1,0 +1,1216 @@
+/* Scan Stock : conçu d'abord pour le PDA du dépôt (Seuic AutoID 9N : écran 4", 800 × 480, ≈ 320 points de large,
+   clavier physique, Android 9). Compatible avec un ancien WebView (Chrome 61+) : espacements par marges (pas de
+   « gap » en flex), positions par top/right/bottom/left (pas de « inset »). Plus aéré sur un écran plus grand. */
+:root {
+  --fond: #eef2f8;
+  --carte: #ffffff;
+  --encre: #0f172a;
+  --encre-2: #64748b;
+  --ligne: #e2e8f0;
+  --principal: #1f5fbf;
+  --principal-2: #3b82f6;
+  --principal-doux: #e8f0fd;
+  --ok: #16a34a;
+  --ok-doux: #e7f7ee;
+  --attente: #d97706;
+  --attente-doux: #fff4e0;
+  --danger: #dc2626;
+  --danger-doux: #fdecec;
+  --violet: #7c3aed;
+  --violet-doux: #f1eafe;
+  --rayon: 14px;
+  --ombre: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.07);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--fond);
+  color: var(--encre);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+svg {
+  flex: 0 0 auto;
+}
+
+/* Touche du clavier physique rappelée sur un bouton (F1, F2, ↵). */
+kbd {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+
+/* ---------- Mise en page ---------- */
+.app {
+  min-height: 100vh;
+  padding-bottom: 84px;
+}
+
+.contenu {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.contenu > * + * {
+  margin-top: 14px;
+}
+
+/* Écran de scan : la carte de saisie chevauche l'en-tête. */
+.contenu--scan {
+  margin-top: -18px;
+  padding-top: 0;
+}
+
+.contenu--scan > * + * {
+  margin-top: 10px;
+}
+
+/* ---------- En-tête dégradé (compact) ---------- */
+.entete {
+  padding: 10px 12px 14px;
+  border-radius: 0 0 20px 20px;
+  background: linear-gradient(140deg, var(--principal), var(--principal-2));
+  color: #fff;
+}
+
+.entete--compact {
+  padding-bottom: 28px;
+}
+
+.entete__ligne {
+  display: flex;
+  align-items: center;
+}
+
+.entete__ligne > * + * {
+  margin-left: 10px;
+}
+
+.entete__titre {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.entete__titre > * + * {
+  margin-top: 3px;
+}
+
+.entete h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.entete__sous {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.puce-societe {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.puce-societe svg {
+  margin-right: 5px;
+}
+
+.nom-collecte {
+  width: 100%;
+  padding: 1px 0;
+  border: 0;
+  border-bottom: 1.5px dashed rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
+  outline: none;
+}
+
+.nom-collecte::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Compteurs : en cours, à envoyer, envoyées (une ligne). */
+.chiffres {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-gap: 8px;
+  margin-top: 12px;
+}
+
+.chiffre {
+  display: flex;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.chiffre strong {
+  margin-right: 5px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.chiffre span {
+  overflow: hidden;
+  font-size: 11px;
+  opacity: 0.85;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Boutons ---------- */
+.bouton-rond {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+}
+
+.bouton-rond--verre {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.bouton-rond--doux {
+  background: var(--fond);
+  color: var(--encre);
+}
+
+.bouton-rond--plein {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--principal);
+  color: #fff;
+}
+
+.bouton-rond--petit {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--fond);
+  color: var(--encre-2);
+}
+
+.bouton-rond--actif {
+  background: var(--principal-doux);
+  color: var(--principal);
+}
+
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--carte);
+  color: var(--encre);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--ligne);
+}
+
+.bouton svg {
+  margin-right: 8px;
+}
+
+.bouton--principal {
+  background: linear-gradient(140deg, var(--principal), var(--principal-2));
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(31, 95, 191, 0.35);
+}
+
+.bouton--doux {
+  background: var(--principal-doux);
+  color: var(--principal);
+  box-shadow: none;
+}
+
+.bouton--danger {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.bouton--danger-doux {
+  background: var(--danger-doux);
+  color: var(--danger);
+  box-shadow: none;
+}
+
+.bouton--large {
+  width: 100%;
+  min-height: 50px;
+  font-size: 16px;
+}
+
+.lien {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--principal);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.lien--danger {
+  color: var(--danger);
+}
+
+/* Barre du bas (nouvelle collecte, envoyer) : toujours au pouce. */
+.barre-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 10px 12px 12px;
+  background: linear-gradient(to top, var(--fond) 70%, rgba(238, 242, 248, 0));
+}
+
+/* ---------- Titres de section ---------- */
+.section-titre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 2px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--encre-2);
+}
+
+/* ---------- Cartes de collecte ---------- */
+.liste-cartes,
+.liste-lignes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liste-cartes > li + li,
+.liste-lignes > li + li {
+  margin-top: 8px;
+}
+
+.carte-collecte {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: var(--rayon);
+  background: var(--carte);
+  box-shadow: var(--ombre);
+}
+
+.carte-collecte__corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 10px 6px 10px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.carte-collecte__barre {
+  align-self: stretch;
+  width: 4px;
+  margin-right: 10px;
+  border-radius: 0 4px 4px 0;
+  background: currentColor;
+}
+
+.carte-collecte__texte {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.carte-collecte__texte > * + * {
+  margin-top: 2px;
+}
+
+.carte-collecte__texte strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carte-collecte__texte > span {
+  font-size: 12px;
+  color: var(--encre-2);
+}
+
+.carte-collecte__note {
+  color: var(--violet) !important;
+  font-weight: 600;
+}
+
+.carte-collecte__suppr {
+  flex: 0 0 auto;
+  width: 42px;
+  border: 0;
+  border-left: 1px solid var(--ligne);
+  background: none;
+  color: var(--encre-2);
+}
+
+.carte-collecte__suppr:active {
+  background: var(--danger-doux);
+  color: var(--danger);
+}
+
+/* Statuts : couleur de la barre et de la pastille. */
+.statut {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.statut--cours {
+  color: var(--principal);
+  background: var(--principal-doux);
+}
+
+.statut--attente {
+  color: var(--attente);
+  background: var(--attente-doux);
+}
+
+.statut--envoyee {
+  color: var(--ok);
+  background: var(--ok-doux);
+}
+
+.statut--importee {
+  color: var(--violet);
+  background: var(--violet-doux);
+}
+
+.carte-collecte__barre.statut--cours,
+.carte-collecte__barre.statut--attente,
+.carte-collecte__barre.statut--envoyee,
+.carte-collecte__barre.statut--importee {
+  margin-left: 0;
+  padding: 0;
+  background: currentColor;
+}
+
+/* ---------- États vides ---------- */
+.vide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 18px;
+  border-radius: var(--rayon);
+  background: var(--carte);
+  box-shadow: var(--ombre);
+  text-align: center;
+}
+
+.vide > * + * {
+  margin-top: 8px;
+}
+
+.vide--petit {
+  padding: 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.vide__icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: var(--principal-doux);
+  color: var(--principal);
+}
+
+.vide h2 {
+  margin-bottom: 0;
+  font-size: 17px;
+}
+
+.vide p {
+  margin-bottom: 0;
+  max-width: 280px;
+  color: var(--encre-2);
+  line-height: 1.4;
+}
+
+/* ---------- Catalogue (pied de l'accueil) ---------- */
+.catalogue {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--carte);
+  color: var(--encre-2);
+  font-size: 12px;
+}
+
+.catalogue span {
+  flex: 1;
+  margin: 0 8px;
+}
+
+/* ---------- Message (toast) ---------- */
+.toast {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  top: 10px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--encre);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  animation: arrivee 220ms ease;
+}
+
+.toast svg {
+  margin-right: 10px;
+}
+
+.toast--ok svg {
+  color: #4ade80;
+}
+
+.toast--ko svg {
+  color: #fbbf24;
+}
+
+@keyframes arrivee {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* ---------- Écran de scan ---------- */
+.zone-scan {
+  padding: 10px;
+  border-radius: var(--rayon);
+  background: var(--carte);
+  box-shadow: var(--ombre);
+}
+
+.zone-scan__champ {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 8px 0 12px;
+  border: 2px solid var(--principal);
+  border-radius: 12px;
+  background: var(--principal-doux);
+  color: var(--principal);
+}
+
+.zone-scan__champ svg {
+  margin-right: 8px;
+}
+
+.zone-scan__champ input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--encre);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  outline: none;
+}
+
+.zone-scan__champ input::placeholder {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--encre-2);
+}
+
+.zone-scan__champ .bouton-rond {
+  margin-left: 6px;
+}
+
+.zone-scan__champ .bouton-rond svg {
+  margin: 0;
+}
+
+.zone-scan__outils {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.zone-scan__boutons {
+  display: flex;
+}
+
+.zone-scan__boutons > * + * {
+  margin-left: 6px;
+}
+
+/* Mode : quantité à chaque scan, ou chaque scan ajoute 1. */
+.segment {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--fond);
+}
+
+.segment button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--encre-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.segment .segment--actif {
+  background: var(--carte);
+  color: var(--principal);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+/* Dernier code scanné : vert reconnu, orange inconnu ou annulé. */
+.retour-scan {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  animation: arrivee 200ms ease;
+}
+
+.retour-scan--ok {
+  background: var(--ok-doux);
+  color: var(--ok);
+}
+
+.retour-scan--ko {
+  background: var(--attente-doux);
+  color: var(--attente);
+}
+
+.retour-scan__icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+  border-radius: 10px;
+  background: currentColor;
+}
+
+.retour-scan__icone svg {
+  color: #fff;
+}
+
+.retour-scan__texte {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.retour-scan__texte strong {
+  overflow: hidden;
+  color: var(--encre);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retour-scan__texte span {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* Lignes scannées : nom, code, quantité réglable (− / +). */
+.ligne {
+  display: flex;
+  align-items: center;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  background: var(--carte);
+  box-shadow: var(--ombre);
+}
+
+.ligne--inconnue {
+  background: linear-gradient(90deg, var(--attente-doux), var(--carte) 60%);
+}
+
+.ligne__texte {
+  flex: 1;
+  min-width: 0;
+  margin-right: 8px;
+}
+
+/* Le nom de l'article compte : deux lignes avant de couper. */
+.ligne__texte strong {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.25;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.ligne--inconnue .ligne__texte strong {
+  color: var(--attente);
+}
+
+.ligne__texte span {
+  display: block;
+  margin-top: 2px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--encre-2);
+}
+
+.pas-a-pas {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--fond);
+}
+
+.pas-a-pas > * + * {
+  margin-left: 2px;
+}
+
+.pas-a-pas button,
+.pas-a-pas input {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--principal);
+}
+
+.pas-a-pas .pas-a-pas__valeur,
+.pas-a-pas input {
+  width: 42px;
+  background: var(--carte);
+  color: var(--encre);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+/* ---------- Feuilles du bas (quantité, confirmations) ---------- */
+.feuille {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.feuille__voile {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(15, 23, 42, 0.45);
+  animation: fondu 180ms ease;
+}
+
+.feuille__panneau {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px 14px;
+  border-radius: 20px 20px 0 0;
+  background: var(--carte);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+  animation: monte 240ms ease-out;
+}
+
+.feuille__panneau > * + * {
+  margin-top: 10px;
+}
+
+.feuille__poignee {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--ligne);
+}
+
+.feuille__panneau h2 {
+  margin-bottom: 0;
+  font-size: 17px;
+}
+
+.feuille__panneau > p {
+  margin-bottom: 0;
+  color: var(--encre-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.feuille__article {
+  color: var(--encre) !important;
+  font-size: 16px !important;
+  font-weight: 800;
+  text-align: center;
+}
+
+.feuille__article--inconnu {
+  color: var(--attente) !important;
+}
+
+.feuille__code {
+  margin-top: 2px !important;
+  font-family: monospace;
+  font-size: 12px !important;
+  text-align: center;
+}
+
+.quantite-geante {
+  width: 100%;
+  min-height: 64px;
+  border: 2px solid var(--principal);
+  border-radius: 14px;
+  background: var(--principal-doux);
+  color: var(--encre);
+  font-size: 34px;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+}
+
+.quantite-geante::placeholder {
+  color: rgba(15, 23, 42, 0.25);
+}
+
+.feuille__actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  grid-gap: 8px;
+}
+
+@keyframes fondu {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes monte {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* ---------- Champs ---------- */
+.champ {
+  display: flex;
+  flex-direction: column;
+}
+
+.champ > * + * {
+  margin-top: 5px;
+}
+
+.champ > span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.champ input,
+.champ select {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ligne);
+  border-radius: 12px;
+  background: var(--carte);
+  font-size: 15px;
+  outline: none;
+}
+
+.champ input:focus {
+  border-color: var(--principal);
+}
+
+.champ small {
+  color: var(--encre-2);
+  font-size: 12px;
+}
+
+.erreur {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- Menu latéral (société, serveur, données) ---------- */
+.menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.menu--ouvert {
+  pointer-events: auto;
+}
+
+.menu__voile {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(15, 23, 42, 0.45);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.menu--ouvert .menu__voile {
+  opacity: 1;
+}
+
+.menu__panneau {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 88%;
+  max-width: 360px;
+  overflow-y: auto;
+  padding: 14px 14px 20px;
+  border-radius: 0 20px 20px 0;
+  background: var(--carte);
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.2);
+  transform: translateX(-102%);
+  transition: transform 260ms ease-out;
+}
+
+.menu__panneau > * + * {
+  margin-top: 14px;
+}
+
+/* Fermé : ni ombre ni panneau au bord de l'écran. */
+.menu:not(.menu--ouvert) .menu__panneau {
+  box-shadow: none;
+  visibility: hidden;
+  transition:
+    transform 260ms ease-out,
+    visibility 0s 260ms;
+}
+
+.menu--ouvert .menu__panneau {
+  transform: none;
+}
+
+.menu__tete {
+  display: flex;
+  align-items: center;
+}
+
+.menu__tete > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 10px;
+}
+
+.menu__tete strong {
+  font-size: 18px;
+}
+
+.menu__tete span {
+  font-size: 12px;
+  color: var(--encre-2);
+}
+
+.menu__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, var(--principal), var(--principal-2));
+  color: #fff;
+}
+
+.menu__bloc {
+  padding: 12px;
+  border-radius: var(--rayon);
+  background: var(--fond);
+}
+
+.menu__bloc > * + * {
+  margin-top: 10px;
+}
+
+.menu__bloc h2 {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--encre-2);
+}
+
+.menu__bloc h2 svg {
+  margin-right: 6px;
+}
+
+.menu__bloc .bouton {
+  width: 100%;
+}
+
+.menu__aide {
+  margin: 0;
+  font-size: 13px;
+  color: var(--encre-2);
+  line-height: 1.4;
+}
+
+.menu__societes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu__societes > li + li {
+  margin-top: 6px;
+}
+
+.menu__societe {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  background: var(--carte);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.menu__societe--choisie {
+  border-color: var(--principal);
+  color: var(--principal);
+}
+
+.menu__radio {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  border: 2px solid var(--ligne);
+  border-radius: 50%;
+}
+
+.menu__societe--choisie .menu__radio {
+  border: 5px solid var(--principal);
+}
+
+.pastille {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pastille--ok {
+  background: var(--ok-doux);
+  color: var(--ok);
+}
+
+.pastille--ko {
+  background: var(--danger-doux);
+  color: var(--danger);
+}
+
+/* ---------- Écran plus grand (téléphone) : plus d'air ---------- */
+@media (min-width: 400px) {
+  html,
+  body {
+    font-size: 16px;
+  }
+
+  .entete {
+    padding: 16px 16px 20px;
+    border-radius: 0 0 26px 26px;
+  }
+
+  .entete--compact {
+    padding-bottom: 36px;
+  }
+
+  .entete h1 {
+    font-size: 22px;
+  }
+
+  .chiffre {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .chiffre strong {
+    margin: 0 0 3px;
+    font-size: 24px;
+  }
+
+  .chiffre span {
+    font-size: 12px;
+  }
+
+  .contenu {
+    padding: 16px;
+  }
+
+  .contenu--scan {
+    margin-top: -24px;
+    padding-top: 0;
+  }
+
+  .carte-collecte__corps {
+    padding: 14px 6px 14px 0;
+  }
+
+  .zone-scan {
+    padding: 14px;
+  }
+
+  .zone-scan__champ {
+    min-height: 60px;
+  }
+
+  .ligne {
+    padding: 12px 12px 12px 14px;
+  }
+
+  .pas-a-pas button,
+  .pas-a-pas input {
+    width: 36px;
+    height: 36px;
+  }
+
+  .pas-a-pas .pas-a-pas__valeur,
+  .pas-a-pas input {
+    width: 48px;
+    font-size: 17px;
+  }
+
+  .bouton--large {
+    min-height: 56px;
+    font-size: 17px;
+  }
+}
+
+/* Erreur d'envoi sur une carte : une seule ligne (le détail est dans le menu ☰ › Serveur). */
+.carte-collecte__texte .erreur {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

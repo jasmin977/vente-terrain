@@ -13,7 +13,7 @@ import { plageDates } from "../utils/plage";
 export const stockHistoriqueRouter = Router();
 stockHistoriqueRouter.use(requireAuth, requireAdmin, requireSociete, ciblesDeLaSociete);
 
-class RefusSuppression extends Error {}
+export class RefusSuppression extends Error {}
 
 function serverError(res: Response, err: unknown) {
   console.error(err);
@@ -108,36 +108,42 @@ stockHistoriqueRouter.get("/depot/entrees/:id", async (req, res) => {
   }
 });
 
+/**
+ * Supprime une réception au dépôt : les quantités reçues sont retirées (lots compris). Refusée (RefusSuppression)
+ * quand elle n'est plus possible. Sert au bon d'entrée et à la suppression d'un achat fournisseur.
+ */
+export async function supprimerEntreeDepot(tx: Prisma.TransactionClient, id: string, societeId: string) {
+    const entree = await tx.entreeDepot.findFirst({ where: { id, societeId }, include: { lignes: true } });
+    if (!entree) throw new RefusSuppression("Entrée introuvable");
+    const verif = await verifierSuppressionEntree(tx, entree);
+    if (!verif.possible) throw new RefusSuppression(verif.raison!);
+
+    const reference = `Suppression entrée ${entree.reference ?? dateCourte(entree.date)}`;
+    for (const l of entree.lignes) {
+      await tx.stockDepot.upsert({
+        where: { articleId: l.articleId },
+        create: { articleId: l.articleId, quantite: -Number(l.quantite) },
+        update: { quantite: { decrement: l.quantite } },
+      });
+      // Les lots de cette réception partent en premier.
+      await synchroniserLots(tx, l.articleId, entree.id);
+      await tx.mouvementDepot.create({
+        data: {
+          articleId: l.articleId,
+          sens: "AJUSTEMENT",
+          quantite: -Number(l.quantite),
+          reference,
+          entreeId: entree.id,
+        },
+      });
+    }
+    await tx.entreeDepot.update({ where: { id: entree.id }, data: { deletedAt: new Date() } });
+}
+
 // Supprimer une entrée retire du dépôt les quantités reçues.
 stockHistoriqueRouter.delete("/depot/entrees/:id", async (req, res) => {
   try {
-    await prisma.$transaction(async (tx) => {
-      const entree = await tx.entreeDepot.findFirst({ where: { id: req.params.id, societeId: req.societeId }, include: { lignes: true } });
-      if (!entree) throw new RefusSuppression("Entrée introuvable");
-      const verif = await verifierSuppressionEntree(tx, entree);
-      if (!verif.possible) throw new RefusSuppression(verif.raison!);
-
-      const reference = `Suppression entrée ${entree.reference ?? dateCourte(entree.date)}`;
-      for (const l of entree.lignes) {
-        await tx.stockDepot.upsert({
-          where: { articleId: l.articleId },
-          create: { articleId: l.articleId, quantite: -Number(l.quantite) },
-          update: { quantite: { decrement: l.quantite } },
-        });
-        // Les lots de cette réception partent en premier.
-        await synchroniserLots(tx, l.articleId, entree.id);
-        await tx.mouvementDepot.create({
-          data: {
-            articleId: l.articleId,
-            sens: "AJUSTEMENT",
-            quantite: -Number(l.quantite),
-            reference,
-            entreeId: entree.id,
-          },
-        });
-      }
-      await tx.entreeDepot.update({ where: { id: entree.id }, data: { deletedAt: new Date() } });
-    });
+    await prisma.$transaction((tx) => supprimerEntreeDepot(tx, req.params.id, req.societeId!));
     res.status(204).send();
   } catch (err) {
     repondreErreur(res, err);

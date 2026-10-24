@@ -2,19 +2,25 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
-import { creerFacture } from "../services/factureService";
+import { piecesSorties, creerFacture } from "../services/factureService";
 import { prochainNumeroFacture } from "../utils/numero";
 import { reglementsFactures } from "../services/creditService";
 
 export const facturesRouter = Router();
 facturesRouter.use(requireAuth, requireSociete);
 
-const ligneSchema = z.object({
-  articleId: z.string().uuid(),
-  quantite: z.number().positive(),
-  prixUnitaire: z.number().nonnegative(),
-  tauxTva: z.number().min(0).max(100),
-});
+const ligneSchema = z
+  .object({
+    articleId: z.string().uuid(),
+    // 0 : article seulement offert (promotion « article offert »).
+    quantite: z.number().nonnegative(),
+    prixUnitaire: z.number().nonnegative(),
+    tauxTva: z.number().min(0).max(100),
+    quantiteOfferte: z.number().nonnegative().optional(),
+    remise: z.number().nonnegative().optional(),
+    promotionId: z.string().uuid().optional().nullable(),
+  })
+  .refine((l) => l.quantite + (l.quantiteOfferte ?? 0) > 0, "Quantité nulle sur une ligne");
 
 const factureSchema = z.object({
   id: z.string().uuid().optional(), // fourni par le mobile pour idempotence hors-ligne
@@ -25,6 +31,8 @@ const factureSchema = z.object({
   modePaiement: z.enum(["ESPECES", "CHEQUE", "VIREMENT", "TPE"]).optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  // Admin seulement : le vendeur dont le camion livre ce bon (il en porte le numéro et le stock camion diminue).
+  vendeurId: z.string().uuid().optional(),
   lignes: z.array(ligneSchema).min(1),
 });
 
@@ -33,7 +41,7 @@ const factureSchema = z.object({
 facturesRouter.get("/numero-suivant", async (req, res) => {
   try {
     const vendeur = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id }, select: { code: true } });
-    const numero = await prisma.$transaction((tx) => prochainNumeroFacture(tx, vendeur.code));
+    const numero = await prisma.$transaction((tx) => prochainNumeroFacture(tx));
     res.json({ numero });
   } catch (err) {
     console.error(err);
@@ -48,7 +56,17 @@ facturesRouter.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   try {
-    const facture = await creerFacture(req.user!.id, parsed.data, req.societeId!);
+    let vendeurId = req.user!.id;
+    if (req.user!.role === "ADMIN") {
+      if (!parsed.data.vendeurId) return res.status(400).json({ error: "Choisissez le vendeur dont le camion livre ce bon" });
+      const vendeur = await prisma.user.findFirst({
+        where: { id: parsed.data.vendeurId, role: "VENDEUR", actif: true, societeId: req.societeId },
+        select: { id: true },
+      });
+      if (!vendeur) return res.status(404).json({ error: "Vendeur introuvable" });
+      vendeurId = vendeur.id;
+    }
+    const facture = await creerFacture(vendeurId, parsed.data, req.societeId!);
     res.status(201).json(facture);
   } catch (err) {
     res.status(409).json({ error: (err as Error).message });
@@ -69,7 +87,7 @@ const visiblePourVendeur = (f: { vendeurId: string; date: Date }, vendeurId: str
 
 facturesRouter.get("/", async (req, res) => {
   const query = req.query as Record<string, string | undefined>;
-  const { clientId } = query;
+  const { clientId, aFacturer } = query;
   let { vendeurId, dateFrom, dateTo } = query;
   if (req.user!.role === "VENDEUR") {
     vendeurId = req.user!.id;
@@ -82,6 +100,9 @@ facturesRouter.get("/", async (req, res) => {
   const factures = await prisma.facture.findMany({
     where: {
       deletedAt: null,
+      // aFacturer : seulement les bons pas encore transformés en facture (écran de transformation).
+      // Sinon les bons déjà facturés restent listés, marqués comme facturés.
+      ...(aFacturer ? { factureVenteId: null } : {}),
       client: { societeId: req.societeId },
       ...(clientId ? { clientId } : {}),
       ...(vendeurId ? { vendeurId } : {}),
@@ -94,7 +115,7 @@ facturesRouter.get("/", async (req, res) => {
           }
         : {}),
     },
-    include: { lignes: { include: { article: true } }, client: true },
+    include: { lignes: { include: { article: true, promotion: { select: { numero: true, type: true, mode: true } } } }, client: true, factureVente: { select: { numero: true } } },
     orderBy: { date: "desc" },
     take: 500,
   });
@@ -107,7 +128,7 @@ facturesRouter.get("/:id", async (req, res) => {
   const facture = await prisma.facture.findFirst({
     where: { id: req.params.id, client: { societeId: req.societeId } },
     include: {
-      lignes: { include: { article: true } },
+      lignes: { include: { article: true, promotion: { select: { numero: true, type: true, mode: true } } } },
       client: true,
       // Jamais l'utilisateur complet (hash du mot de passe, version de session…).
       vendeur: { select: { id: true, nom: true, code: true } },
@@ -132,14 +153,15 @@ facturesRouter.post("/:id/annuler", requireAdmin, async (req, res) => {
         include: { lignes: true },
       });
       if (!facture) return "introuvable";
+      if (facture.factureVenteId) return "facture";
       if (facture.statut === "ANNULEE") return "deja";
       const maj = await tx.facture.updateMany({ where: { id: facture.id, statut: "VALIDEE" }, data: { statut: "ANNULEE" } });
       if (maj.count === 0) return "deja";
       for (const l of facture.lignes) {
         await tx.stockCamion.upsert({
           where: { vendeurId_articleId: { vendeurId: facture.vendeurId, articleId: l.articleId } },
-          create: { vendeurId: facture.vendeurId, articleId: l.articleId, quantite: l.quantite },
-          update: { quantite: { increment: l.quantite } },
+          create: { vendeurId: facture.vendeurId, articleId: l.articleId, quantite: piecesSorties(l) },
+          update: { quantite: { increment: piecesSorties(l) } },
         });
         // Tracé dans les mouvements pour que l'historique du camion reste lisible.
         await tx.mouvementStock.create({
@@ -147,7 +169,7 @@ facturesRouter.post("/:id/annuler", requireAdmin, async (req, res) => {
             vendeurId: facture.vendeurId,
             articleId: l.articleId,
             sens: "AJUSTEMENT",
-            quantite: l.quantite,
+            quantite: piecesSorties(l),
             reference: `Annulation ${facture.numero}`,
           },
         });
@@ -155,6 +177,7 @@ facturesRouter.post("/:id/annuler", requireAdmin, async (req, res) => {
       return "ok";
     });
     if (annule === "introuvable") return res.status(404).json({ error: "Bon de livraison introuvable" });
+    if (annule === "facture") return res.status(409).json({ error: "Ce bon de livraison a été transformé en facture" });
     if (annule === "deja") return res.status(409).json({ error: "Ce bon de livraison est déjà annulé" });
     res.status(204).send();
   } catch (err) {

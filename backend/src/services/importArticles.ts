@@ -446,9 +446,21 @@ export async function importerArticles(fichierBase64: string, societeId: string,
   } catch {
     throw new ErreurImport("Fichier illisible : envoyez un fichier Excel .xlsx");
   }
-  const ws = wb.worksheets[0];
-  if (!ws) throw new ErreurImport("Le fichier ne contient aucune feuille");
-  const { parColonne, classementSeul } = resoudreColonnes(ws);
+  if (!wb.worksheets.length) throw new ErreurImport("Le fichier ne contient aucune feuille");
+  // La feuille des articles : la première dont les en-têtes sont reconnus (le classeur peut avoir une feuille
+  // de résumé ou de consignes avant). Aucune : l'erreur porte sur la première feuille.
+  let ws = wb.worksheets[0];
+  let colonnes: ReturnType<typeof resoudreColonnes> | null = null;
+  for (const feuille of wb.worksheets) {
+    try {
+      colonnes = resoudreColonnes(feuille);
+      ws = feuille;
+      break;
+    } catch (err) {
+      if (!(err instanceof ErreurImport)) throw err;
+    }
+  }
+  const { parColonne, classementSeul } = colonnes ?? resoudreColonnes(ws);
   if (classementSeul) return classerSeulement(ws, parColonne, societeId);
 
   // Lecture du fichier.

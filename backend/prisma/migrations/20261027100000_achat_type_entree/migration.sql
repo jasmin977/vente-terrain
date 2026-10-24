@@ -1,0 +1,1 @@
+ALTER TYPE "TypeAchat" ADD VALUE 'ENTREE';

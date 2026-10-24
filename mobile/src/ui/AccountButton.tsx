@@ -14,6 +14,8 @@ import Button from "./Button";
 import Field from "./Field";
 import { getLang, setLang, t, tn, type Lang } from "../i18n";
 import SyncButton from "../components/SyncButton";
+import NotificationsButton from "../components/NotificationsButton";
+import PleinEcranButton from "../components/PleinEcranButton";
 import SocieteLogo from "../components/SocieteLogo";
 import { useSociete } from "../societe/SocieteContext";
 import MonMotDePasseSheet from "../components/MonMotDePasseSheet";
@@ -49,7 +51,9 @@ export default function AccountButton() {
 
   return (
     <>
+      <PleinEcranButton />
       {user.role === "VENDEUR" && <SyncButton />}
+      {user.role === "ADMIN" && <NotificationsButton />}
       <button
         type="button"
         className="rc-iconbtn"

@@ -31,11 +31,26 @@ import ChargementForm from "./ChargementForm";
 import StockDocumentDetail from "./StockDocumentDetail";
 import CamionArticleHistorique from "./CamionArticleHistorique";
 import Factures from "./Factures";
+import VentesFactures from "./VentesFactures";
+import VentesTransformation from "./VentesTransformation";
 import FactureForm from "./FactureForm";
 import FactureDetail from "./FactureDetail";
 import Inventaires from "./Inventaires";
 import InventaireDetail from "./InventaireDetail";
 import Vendeurs from "./Vendeurs";
+import AchatsListe from "./AchatsListe";
+import Fournisseurs from "./Fournisseurs";
+import ReglementsFournisseurs from "./ReglementsFournisseurs";
+import ImpressionEffets from "./ImpressionEffets";
+import Promotions from "./Promotions";
+import CaisseVentes from "./caisse/CaisseVentes";
+import CaissePostes from "./caisse/CaissePostes";
+import Caissiers from "./caisse/Caissiers";
+import CaisseTouches from "./caisse/CaisseTouches";
+import PromotionForm from "./PromotionForm";
+import Depenses from "./Depenses";
+import Journal from "./Journal";
+import AchatsTransformation from "./AchatsTransformation";
 import VendeurForm from "./VendeurForm";
 import { useAuth } from "../auth/AuthContext";
 import BarreLaterale from "../components/BarreLaterale";
@@ -102,6 +117,8 @@ export default function TabsLayout() {
         <Route path="/factures" element={<Factures />} />
         <Route path="/factures/new" element={<FactureForm />} />
         <Route path="/factures/:id" element={<FactureDetail />} />
+        <Route path="/ventes/factures" element={<VentesFactures />} />
+        <Route path="/ventes/transformation" element={<VentesTransformation />} />
         <Route path="/articles" element={<Articles />} />
         <Route path="/articles/:id" element={<ArticleForm />} />
         <Route path="/clients" element={<Clients />} />
@@ -122,12 +139,30 @@ export default function TabsLayout() {
             </Suspense>
           }
         />
-        <Route path="/stock/entrees/:id" element={<StockDocumentDetail kind="entree" />} />
         <Route path="/stock/chargements/:id" element={<StockDocumentDetail kind="chargement" />} />
         <Route path="/stock/camion/:vendeurId/articles/:articleId" element={<CamionArticleHistorique />} />
         <Route path="/inventaires" element={<Inventaires />} />
         <Route path="/inventaires/:id" element={<InventaireDetail />} />
         <Route path="/vendeurs" element={<Vendeurs />} />
+        <Route path="/achats/bl" element={<AchatsListe key="BL" type="BL" />} />
+        <Route path="/achats/factures" element={<AchatsListe key="FACTURE" type="FACTURE" />} />
+        <Route path="/achats/entrees" element={<AchatsListe key="ENTREE" type="ENTREE" />} />
+        <Route path="/achats/transformation" element={<AchatsTransformation />} />
+        <Route path="/fournisseurs" element={<Fournisseurs />} />
+        <Route path="/fournisseurs/reglements" element={<ReglementsFournisseurs />} />
+        <Route path="/fournisseurs/impression" element={<ImpressionEffets />} />
+        <Route path="/promotions" element={<Promotions />} />
+        <Route path="/promotions/:id" element={<PromotionForm />} />
+        <Route path="/depenses" element={<Depenses />} />
+        <Route path="/caisse" element={<CaisseVentes key="synthese" vue="synthese" />} />
+        <Route path="/caisse/tickets" element={<CaisseVentes key="tickets" vue="tickets" />} />
+        <Route path="/caisse/clotures" element={<CaisseVentes key="clotures" vue="clotures" />} />
+        <Route path="/caisse/postes" element={<CaissePostes />} />
+        <Route path="/caisse/caissiers" element={<Caissiers />} />
+        <Route path="/caisse/touches" element={<CaisseTouches />} />
+        <Route path="/editions/ventes" element={<Journal key="ventes" type="ventes" />} />
+        <Route path="/editions/achats" element={<Journal key="achats" type="achats" />} />
+        <Route path="/editions/stock" element={<Journal key="stock" type="stock" />} />
         <Route path="/vendeurs/:id" element={<VendeurForm />} />
         <Route path="/" element={<RedirectOnce to={accueil(user?.role)} />} />
       </IonRouterOutlet>

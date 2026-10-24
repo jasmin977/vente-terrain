@@ -32,6 +32,16 @@ enum ModePaiement {
   CHEQUE
   VIREMENT
   TPE
+  // Règlement fournisseur par traite (effet de commerce) ; son numéro va dans la référence.
+  TRAITE
+}
+
+// Document d'achat reçu d'un fournisseur : bon de livraison (BL) ou facture.
+enum TypeAchat {
+  BL
+  FACTURE
+  // Bon d'entrée : achat sans papier légal (numéro automatique, fournisseur facultatif → « Divers »).
+  ENTREE
 }
 
 enum StatutFacture {
@@ -56,6 +66,9 @@ enum SensMouvementDepot {
   CHARGEMENT
   RETOUR
   AJUSTEMENT
+  // Caisse du supermarché : vente au comptoir (sortie) et retour d'un client (entrée).
+  VENTE_CAISSE
+  RETOUR_CAISSE
 }
 
 enum StatutInventaire {
@@ -74,8 +87,17 @@ enum MotifEcart {
 // Société (entreprise) gérée par l'admin : chacune a ses propres articles,
 // clients, dépôt, vendeurs (et donc camions) et bons. L'admin passe de l'une à
 // l'autre ; un vendeur appartient à une seule société.
+// Dépôt (distribution) ou supermarché : le supermarché a tout le dépôt, plus ses caisses.
+enum TypeSociete {
+  DEPOT
+  SUPERMARCHE
+}
+
 model Societe {
   id              String    @id @default(uuid())
+  type            TypeSociete @default(DEPOT)
+  // Supermarché : commission retenue par l'émetteur sur les tickets restaurant (%), les bons d'achat n'en ont pas.
+  commissionTicketResto Decimal @default(10) @db.Decimal(5, 2)
   // Préfixe des comptes vendeurs (RC → RC-V001) : codes uniques dans toute l'app.
   code            String    @unique
   nom             String
@@ -88,13 +110,28 @@ model Societe {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  articles    Article[]
-  clients     Client[]
-  users       User[]
-  entrees     EntreeDepot[]
-  inventaires Inventaire[]
-  categories  Categorie[]
-  entrepot    Entrepot?
+  articles               Article[]
+  clients                Client[]
+  users                  User[]
+  entrees                EntreeDepot[]
+  inventaires            Inventaire[]
+  categories             Categorie[]
+  entrepot               Entrepot?
+  facturesVente          FactureVente[]
+  fournisseurs           Fournisseur[]
+  achats                 Achat[]
+  reglementsFournisseurs ReglementFournisseur[]
+  depenses               Depense[]
+  categoriesDepense      CategorieDepense[]
+  collectes              Collecte[]
+  comptesBancaires       CompteBancaire[]
+  promotions             Promotion[]
+  caisses                Caisse[]
+  caissiers              Caissier[]
+  famillesTouches        FamilleTouche[]
+  brouillonTouches       BrouillonTouches?
+  sessionsCaisse         SessionCaisse[]
+  ticketsCaisse          TicketCaisse[]
 
   @@map("societes")
 }
@@ -130,6 +167,8 @@ model User {
   entreesDepot     EntreeDepot[]      @relation("EntreeDepotAdmin")
   inventaires      Inventaire[]       @relation("InventaireVendeur")
   inventairesFaits Inventaire[]       @relation("InventaireAdmin")
+  depenses         Depense[]          @relation("DepenseVendeur")
+  collectes        Collecte[]
 
   @@map("users")
 }
@@ -172,6 +211,10 @@ model Article {
   etiquetteJusqua DateTime?            @db.Date
   // Autres codes-barres du même produit (variantes : saveur, couleur, modèle…) : les scanner ramène cet article.
   codesBarres     CodeBarreArticle[]
+  promotionsLignes  PromotionLigne[] @relation("PromotionArticle")
+  touches           Touche[]
+  lignesTicket      LigneTicket[]
+  promotionsOffert  PromotionLigne[] @relation("PromotionArticleOffert")
   // Catégorie (la plus précise : sous-catégorie si elle existe).
   categorieId     String?
   categorie       Categorie?           @relation(fields: [categorieId], references: [id])
@@ -182,18 +225,21 @@ model Article {
   updatedAt       DateTime             @updatedAt
   deletedAt       DateTime?
 
-  stockCamion      StockCamion[]
-  stockDepot       StockDepot?
-  mouvementsDepot  MouvementDepot[]
-  lignesEntree     LigneEntreeDepot[]
-  lignesInventaire LigneInventaire[]
-  lignesFacture    LigneFacture[]
-  lignesRetour     LigneRetour[]
-  lignesChargement LigneChargement[]
-  mouvementsStock  MouvementStock[]
+  stockCamion        StockCamion[]
+  stockDepot         StockDepot?
+  mouvementsDepot    MouvementDepot[]
+  lignesEntree       LigneEntreeDepot[]
+  lignesInventaire   LigneInventaire[]
+  lignesFacture      LigneFacture[]
+  lignesFactureVente LigneFactureVente[]
+  lignesAchat        LigneAchat[]
+  lignesRetour       LigneRetour[]
+  lignesChargement   LigneChargement[]
+  mouvementsStock    MouvementStock[]
 
   @@unique([societeId, code])
   @@index([updatedAt])
+  @@index([categorieId])
   @@map("articles")
 }
 
@@ -203,6 +249,8 @@ model Client {
   societe     Societe   @relation(fields: [societeId], references: [id])
   // Matricule fiscal, unique dans la société.
   code        String
+  // Référence auto-incrémentée par société (1, 2, 3…), plus simple à citer que le MF.
+  ref         Int
   nomCommerce String
   responsable String?
   telephone   String?
@@ -215,12 +263,14 @@ model Client {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  factures  Facture[]
-  retours   Retour[]
-  paiements Paiement[]
-  visites   Visite[]
+  factures      Facture[]
+  facturesVente FactureVente[]
+  retours       Retour[]
+  paiements     Paiement[]
+  visites       Visite[]
 
   @@unique([societeId, code])
+  @@unique([societeId, ref])
   @@index([updatedAt])
   @@map("clients")
 }
@@ -337,6 +387,10 @@ model Inventaire {
   adminId        String
   admin          User              @relation("InventaireAdmin", fields: [adminId], references: [id])
   statut         StatutInventaire  @default(EN_COURS)
+  // Dépôt : catégories inventoriées (avec leurs sous-catégories) ; vide = tout le dépôt.
+  categorieIds   String[]          @default([])
+  // Nom affiché : « Boissons › Eaux », « Tout le dépôt »…
+  libelle        String?
   note           String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -396,24 +450,27 @@ model MouvementStock {
 }
 
 model Facture {
-  id           String        @id @default(uuid())
-  numero       String        @unique
-  clientId     String
-  client       Client        @relation(fields: [clientId], references: [id])
-  vendeurId    String
-  vendeur      User          @relation(fields: [vendeurId], references: [id])
-  date         DateTime      @default(now())
-  typeVente    TypeVente     @default(COMPTANT)
-  modePaiement ModePaiement?
-  montantHT    Decimal       @db.Decimal(12, 3)
-  montantTVA   Decimal       @db.Decimal(12, 3)
-  montantTTC   Decimal       @db.Decimal(12, 3)
-  statut       StatutFacture @default(VALIDEE)
-  latitude     Float?
-  longitude    Float?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime?
+  id             String        @id @default(uuid())
+  numero         String        @unique
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+  vendeurId      String
+  vendeur        User          @relation(fields: [vendeurId], references: [id])
+  date           DateTime      @default(now())
+  typeVente      TypeVente     @default(COMPTANT)
+  modePaiement   ModePaiement?
+  montantHT      Decimal       @db.Decimal(12, 3)
+  montantTVA     Decimal       @db.Decimal(12, 3)
+  montantTTC     Decimal       @db.Decimal(12, 3)
+  statut         StatutFacture @default(VALIDEE)
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+  // Renseigné quand ce bon de livraison a été transformé en facture : il n'apparaît plus comme bon.
+  factureVenteId String?
+  factureVente   FactureVente? @relation(fields: [factureVenteId], references: [id])
 
   lignes    LigneFacture[]
   paiements Paiement[]
@@ -435,8 +492,54 @@ model LigneFacture {
   tauxTva      Decimal @db.Decimal(5, 2)
   montantHT    Decimal @db.Decimal(12, 3)
   montantTTC   Decimal @db.Decimal(12, 3)
+  // Promotion appliquée : pièces offertes (en plus des pièces payées, sorties du stock aussi) et remise HT.
+  quantiteOfferte Decimal @default(0) @db.Decimal(12, 3)
+  remise          Decimal @default(0) @db.Decimal(12, 3)
+  promotionId     String?
+  promotion       Promotion? @relation(fields: [promotionId], references: [id])
 
   @@map("lignes_facture")
+}
+
+/// Facture établie en regroupant des bons de livraison (Ventes > Transformation BL en Facture).
+model FactureVente {
+  id         String   @id @default(uuid())
+  societeId  String
+  societe    Societe  @relation(fields: [societeId], references: [id])
+  // Client des bons regroupés ; vide si la facture mélange plusieurs clients.
+  clientId   String?
+  client     Client?  @relation(fields: [clientId], references: [id])
+  // AAAA/001, numérotation par société et par année.
+  numero     String
+  date       DateTime @default(now())
+  montantHT  Decimal  @db.Decimal(12, 3)
+  montantTVA Decimal  @db.Decimal(12, 3)
+  montantTTC Decimal  @db.Decimal(12, 3)
+  // Droit de timbre ajouté à chaque facture (net à payer = TTC + timbre).
+  timbre     Decimal  @default(1) @db.Decimal(12, 3)
+  createdAt  DateTime @default(now())
+
+  bons   Facture[]
+  lignes LigneFactureVente[]
+
+  @@unique([societeId, numero])
+  @@index([clientId])
+  @@map("factures_vente")
+}
+
+model LigneFactureVente {
+  id             String       @id @default(uuid())
+  factureVenteId String
+  factureVente   FactureVente @relation(fields: [factureVenteId], references: [id])
+  articleId      String
+  article        Article      @relation(fields: [articleId], references: [id])
+  quantite       Decimal      @db.Decimal(12, 3)
+  prixUnitaire   Decimal      @db.Decimal(12, 6)
+  tauxTva        Decimal      @db.Decimal(5, 2)
+  montantHT      Decimal      @db.Decimal(12, 3)
+  montantTTC     Decimal      @db.Decimal(12, 3)
+
+  @@map("lignes_facture_vente")
 }
 
 model Retour {
@@ -654,4 +757,524 @@ model EmplacementArticle {
   @@unique([rackId, niveau, travee, articleId])
   @@index([articleId])
   @@map("entrepot_emplacements")
+}
+
+// ---------------------------------------------------------------- Achats
+
+// Fournisseur de la société. `ref` : numéro court auto-incrémenté par société (1, 2, 3…).
+model Fournisseur {
+  id              String    @id @default(uuid())
+  societeId       String
+  societe         Societe   @relation(fields: [societeId], references: [id])
+  ref             Int
+  nom             String
+  // Fournisseur « Divers » intégré (ref 0, un par société) : achats ponctuels sans fournisseur précis.
+  divers          Boolean   @default(false)
+  matriculeFiscal String?
+  telephone       String?
+  email           String?
+  adresse         String?
+  ville           String?
+  contact         String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  achats     Achat[]
+  reglements ReglementFournisseur[]
+  depenses   Depense[]
+
+  @@unique([societeId, ref])
+  @@index([societeId])
+  @@map("fournisseurs")
+}
+
+// BL ou facture d'un fournisseur. Un BL devient facture quand le fournisseur apporte la facture papier :
+// la facture créée regroupe ses BL (`factureId`), qui ne sont plus modifiables.
+model Achat {
+  id               String      @id @default(uuid())
+  societeId        String
+  societe          Societe     @relation(fields: [societeId], references: [id])
+  fournisseurId    String
+  fournisseur      Fournisseur @relation(fields: [fournisseurId], references: [id])
+  type             TypeAchat
+  // Numéro du document du fournisseur.
+  numero           String
+  // Achat « Divers » : chez qui (précision libre, propre à ce document).
+  fournisseurLibre String?
+  date             DateTime
+  montantHT        Decimal     @db.Decimal(12, 3)
+  montantTVA       Decimal     @db.Decimal(12, 3)
+  montantTTC       Decimal     @db.Decimal(12, 3)
+  // Droit de timbre : 1 TND sur une facture, rien sur un BL (net à payer = TTC + timbre).
+  timbre           Decimal     @default(0) @db.Decimal(12, 3)
+  // La marchandise est entrée au dépôt avec ce document (BL, ou facture saisie directement ; pas une facture
+  // faite de BL, déjà entrés). Supprimer le document la retire du stock.
+  stockAjoute      Boolean     @default(false)
+  notes            String?
+  // BL : la facture fournisseur qui le regroupe.
+  factureId        String?
+  facture          Achat?      @relation("AchatFacture", fields: [factureId], references: [id])
+  bons             Achat[]     @relation("AchatFacture")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime?
+
+  lignes     LigneAchat[]
+  reglements ReglementFournisseur[]
+
+  @@index([societeId, type, date])
+  @@index([fournisseurId])
+  @@index([factureId])
+  @@map("achats")
+}
+
+model LigneAchat {
+  id           String   @id @default(uuid())
+  achatId      String
+  achat        Achat    @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  // Article du catalogue, ou ligne libre (désignation seule).
+  articleId    String?
+  article      Article? @relation(fields: [articleId], references: [id])
+  designation  String
+  quantite     Decimal  @db.Decimal(12, 3)
+  prixUnitaire Decimal  @db.Decimal(12, 6)
+  tauxTva      Decimal  @db.Decimal(5, 2)
+  montantHT    Decimal  @db.Decimal(12, 3)
+  montantTTC   Decimal  @db.Decimal(12, 3)
+  // Date d'expiration des pièces reçues (facultative) : elle crée leur lot au dépôt.
+  dateExpiration DateTime? @db.Date
+
+  @@index([achatId])
+  @@map("lignes_achat")
+}
+
+// Paiement fait à un fournisseur : sur un document (total ou avance), ou avance sur compte (sans document).
+model ReglementFournisseur {
+  id            String       @id @default(uuid())
+  societeId     String
+  societe       Societe      @relation(fields: [societeId], references: [id])
+  fournisseurId String
+  fournisseur   Fournisseur  @relation(fields: [fournisseurId], references: [id])
+  achatId       String?
+  achat         Achat?       @relation(fields: [achatId], references: [id])
+  montant       Decimal      @db.Decimal(12, 3)
+  mode          ModePaiement
+  reference     String?
+  date          DateTime
+  // Traite : date d'échéance (par défaut un mois après la date du document réglé).
+  echeance      DateTime?
+  notes         String?
+  // Chèque / traite imprimé par l'app : compte tiré et valeurs imprimées (pour réimprimer à l'identique).
+  compteBancaireId String?
+  compteBancaire   CompteBancaire? @relation(fields: [compteBancaireId], references: [id])
+  impression       Json?
+  imprimeLe        DateTime?
+  createdAt     DateTime     @default(now())
+  deletedAt     DateTime?
+
+  @@index([societeId, date])
+  @@index([fournisseurId])
+  @@index([achatId])
+  @@index([echeance])
+  @@map("reglements_fournisseurs")
+}
+
+// ---------------------------------------------------------------- Dépenses
+
+// Catégorie de dépense (réparation, carburant, loyer…), modifiable par l'admin.
+model CategorieDepense {
+  id        String    @id @default(uuid())
+  societeId String
+  societe   Societe   @relation(fields: [societeId], references: [id])
+  nom       String
+  ordre     Int       @default(0)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  depenses Depense[]
+
+  @@index([societeId])
+  @@map("categories_depense")
+}
+
+// Dépense de fonctionnement, payée tout de suite (réparation, outil, carburant, loyer…).
+model Depense {
+  id            String           @id @default(uuid())
+  societeId     String
+  societe       Societe          @relation(fields: [societeId], references: [id])
+  date          DateTime
+  categorieId   String
+  categorie     CategorieDepense @relation(fields: [categorieId], references: [id])
+  montant       Decimal          @db.Decimal(12, 3)
+  mode          ModePaiement
+  // N° du chèque ou de la traite, référence du virement.
+  reference     String?
+  description   String
+  // Payé à : un fournisseur de la liste, ou un nom libre.
+  fournisseurId String?
+  fournisseur   Fournisseur?     @relation(fields: [fournisseurId], references: [id])
+  beneficiaire  String?
+  // Camion concerné (carburant, réparation) : le vendeur qui le conduit.
+  vendeurId     String?
+  vendeur       User?            @relation("DepenseVendeur", fields: [vendeurId], references: [id])
+  // Photo du reçu.
+  photo         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+
+  @@index([societeId, date])
+  @@index([categorieId])
+  @@map("depenses")
+}
+
+// ---------------------------------------------------------------- Collectes PDA
+
+// Liste d'articles scannés sur le PDA (application « Collecte »). Terminée, elle s'importe dans un formulaire
+// d'articles du PC (BL / facture fournisseur, B° Entrée, BL de vente, chargement, inventaire), une seule fois.
+model Collecte {
+  id           String    @id
+  societeId    String
+  societe      Societe   @relation(fields: [societeId], references: [id])
+  // Compte qui a envoyé la collecte ; vide pour l'app Scan Stock du dépôt (sans compte).
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id])
+  // Appareil d'origine (« Scan Stock »).
+  appareil     String?
+  nom          String?
+  // Fin de la saisie sur le PDA.
+  termineeLe   DateTime  @default(now())
+  // Dernier import dans un formulaire du PC. Une collecte se réimporte autant de fois que voulu ; seul
+  // l'appareil (Scan Stock) la supprime.
+  importeeLe   DateTime?
+  importeeDans String?
+  nbImports    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  lignes LigneCollecte[]
+
+  @@index([societeId, importeeLe])
+  @@map("collectes")
+}
+
+model LigneCollecte {
+  id         String   @id @default(uuid())
+  collecteId String
+  collecte   Collecte @relation(fields: [collecteId], references: [id], onDelete: Cascade)
+  codeBarre  String
+  quantite   Decimal  @db.Decimal(12, 3)
+  ordre      Int      @default(0)
+
+  @@index([collecteId])
+  @@map("lignes_collecte")
+}
+
+// Compte bancaire de la société : imprimé sur ses chèques et ses traites (tiré, domiciliation, RIB).
+model CompteBancaire {
+  id         String    @id @default(uuid())
+  societeId  String
+  societe    Societe   @relation(fields: [societeId], references: [id])
+  banque     String
+  agence     String?
+  // RIB tunisien : 20 chiffres.
+  rib        String
+  titulaire  String?
+  // Lieu de création imprimé (ville de la société).
+  ville      String?
+  parDefaut  Boolean   @default(false)
+  // Positions d'impression des chèques et des traites de ce compte ({ CHEQUE: …, TRAITE: … }), réglées une fois.
+  gabarits   Json?
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  reglements ReglementFournisseur[]
+
+  @@index([societeId])
+  @@map("comptes_bancaires")
+}
+
+// Promotions (Commercial › Promotions) : prix promo sur une période, ou vente en lot (5 modes). Appliquées
+// automatiquement sur les BL de vente (PC et application des vendeurs) pendant leur période.
+enum TypePromotion {
+  PRIX
+  LOT
+}
+
+enum ModeLot {
+  // Un article acheté, un autre article offert.
+  CADEAU
+  // 1 + 1 gratuit.
+  UN_PLUS_UN
+  // 2e à moitié prix.
+  DEUXIEME_MOITIE
+  // N achetés + 1 gratuit (2+1, 3+1…).
+  N_PLUS_UN
+  // Lot de N pièces à un prix (lot de 10 yaourts = 8 DT).
+  PRIX_LOT
+}
+
+model Promotion {
+  id        String         @id @default(uuid())
+  societeId String
+  societe   Societe        @relation(fields: [societeId], references: [id])
+  type      TypePromotion
+  mode      ModeLot?
+  // PR-26/0001 (prix), LT-26/0001 (lot) : numéro automatique par société, type et année.
+  numero    String
+  libelle   String?
+  dateDebut DateTime       @db.Date
+  dateFin   DateTime       @db.Date
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
+  lignes    PromotionLigne[]
+  lignesFacture LigneFacture[]
+
+  @@unique([societeId, numero])
+  @@index([societeId, dateDebut, dateFin])
+  @@map("promotions")
+}
+
+model PromotionLigne {
+  id              String    @id @default(uuid())
+  promotionId     String
+  promotion       Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  articleId       String
+  article         Article   @relation("PromotionArticle", fields: [articleId], references: [id])
+  // Prix : nouveau prix de vente HT (comme l'article, FODEC compris dans le TTC affiché).
+  prixPromo       Decimal?  @db.Decimal(12, 6)
+  // Article offert : l'article donné et combien pour une pièce achetée.
+  articleOffertId String?
+  articleOffert   Article?  @relation("PromotionArticleOffert", fields: [articleOffertId], references: [id])
+  quantiteOfferte Decimal?  @db.Decimal(12, 3)
+  // N + 1 : nombre de pièces achetées pour une offerte.
+  seuil           Int?
+  // Prix du lot : nombre de pièces du lot et son prix HT.
+  tailleLot       Int?
+  prixLot         Decimal?  @db.Decimal(12, 6)
+  ordre           Int       @default(0)
+
+  @@index([promotionId])
+  @@index([articleId])
+  @@map("promotions_lignes")
+}
+
+// ---------------------------------------------------------------- Caisse du supermarché
+
+// Poste de caisse (TPV), géré par l'admin. L'application de caisse s'y associe une fois avec un code
+// d'appairage, puis s'authentifie avec sa clé (gardée seulement sous forme d'empreinte).
+model Caisse {
+  id             String    @id @default(uuid())
+  societeId      String
+  societe        Societe   @relation(fields: [societeId], references: [id])
+  numero         Int
+  nom            String
+  actif          Boolean   @default(true)
+  // Le caissier compte les espèces du tiroir à la clôture (sinon clôture « à l'aveugle » : il remet la recette
+  // avec un papier, le responsable saisit le montant remis dans l'application de gestion).
+  comptageCaissier Boolean @default(false)
+  cleEmpreinte   String?   @unique
+  codeAppairage  String?
+  codeExpireLe   DateTime?
+  appaireeLe     DateTime?
+  derniereSyncLe DateTime?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+  sessions       SessionCaisse[]
+  tickets        TicketCaisse[]
+
+  @@unique([societeId, numero])
+  @@map("caisses")
+}
+
+// Caissier : se connecte à la caisse avec son code (chiffres), ses droits limitent les actions sensibles.
+model Caissier {
+  id        String    @id @default(uuid())
+  societeId String
+  societe   Societe   @relation(fields: [societeId], references: [id])
+  nom       String
+  codeHash  String
+  // { remise, annulerLigne, annulerTicket, retour, prelevement, rapportX, cloture, tiroir }
+  droits    Json
+  actif     Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  sessions  SessionCaisse[]
+  tickets   TicketCaisse[]
+
+  @@index([societeId])
+  @@map("caissiers")
+}
+
+// Touches rapides de la caisse : familles (colonne de gauche) et leurs articles (sans étiquette à scanner).
+model FamilleTouche {
+  id        String   @id @default(uuid())
+  societeId String
+  societe   Societe  @relation(fields: [societeId], references: [id])
+  nom       String
+  couleur   String
+  ordre     Int      @default(0)
+  touches   Touche[]
+
+  @@index([societeId])
+  @@map("caisse_familles")
+}
+
+// Brouillon des touches rapides : l'admin range familles et articles, enregistre, et n'envoie aux caisses qu'au
+// clic « Synchroniser » (les tables ci-dessus restent la version publiée, téléchargée par les caisses).
+model BrouillonTouches {
+  societeId String   @id
+  societe   Societe  @relation(fields: [societeId], references: [id])
+  contenu   Json
+  updatedAt DateTime @updatedAt
+
+  @@map("caisse_touches_brouillons")
+}
+
+model Touche {
+  id        String        @id @default(uuid())
+  familleId String
+  famille   FamilleTouche @relation(fields: [familleId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article       @relation(fields: [articleId], references: [id])
+  libelle   String?
+  couleur   String?
+  ordre     Int           @default(0)
+
+  @@index([familleId])
+  @@map("caisse_touches")
+}
+
+enum StatutSessionCaisse {
+  OUVERTE
+  CLOTUREE
+}
+
+// Session d'un caissier sur une caisse : fond de caisse à l'ouverture, clôture Z (espèces comptées).
+model SessionCaisse {
+  id              String              @id
+  societeId       String
+  societe         Societe             @relation(fields: [societeId], references: [id])
+  caisseId        String
+  caisse          Caisse              @relation(fields: [caisseId], references: [id])
+  caissierId      String
+  caissier        Caissier            @relation(fields: [caissierId], references: [id])
+  statut          StatutSessionCaisse @default(OUVERTE)
+  ouverteLe       DateTime
+  fondCaisse      Decimal             @db.Decimal(12, 3)
+  clotureeLe      DateTime?
+  numeroZ         Int?
+  especesComptees Decimal?            @db.Decimal(12, 3)
+  // Recette en espèces remise au responsable (hors fond de caisse), saisie depuis le papier du caissier.
+  especesRemises  Decimal?            @db.Decimal(12, 3)
+  remiseSaisieLe  DateTime?
+  remiseSaisiePar String?
+  tickets         TicketCaisse[]
+  mouvements      MouvementCaisse[]
+
+  @@index([societeId, ouverteLe])
+  @@index([caisseId])
+  @@map("caisse_sessions")
+}
+
+enum TypeTicket {
+  VENTE
+  RETOUR
+}
+
+enum ModeReglementCaisse {
+  ESPECES
+  TPE
+  CHEQUE
+  TICKET_RESTO
+  BON_ACHAT
+}
+
+// Ticket de caisse (vente ou retour) : prix TTC, remises, règlements. Envoyé par la caisse (hors ligne possible).
+model TicketCaisse {
+  id         String        @id
+  societeId  String
+  societe    Societe       @relation(fields: [societeId], references: [id])
+  caisseId   String
+  caisse     Caisse        @relation(fields: [caisseId], references: [id])
+  sessionId  String
+  session    SessionCaisse @relation(fields: [sessionId], references: [id])
+  caissierId String
+  caissier   Caissier      @relation(fields: [caissierId], references: [id])
+  numero     Int
+  date       DateTime
+  type       TypeTicket    @default(VENTE)
+  montantHT  Decimal       @db.Decimal(12, 3)
+  montantTVA Decimal       @db.Decimal(12, 3)
+  montantTTC Decimal       @db.Decimal(12, 3)
+  // Remise sur le ticket entier (TTC), en plus des remises de lignes.
+  remise     Decimal       @default(0) @db.Decimal(12, 3)
+  rendu      Decimal       @default(0) @db.Decimal(12, 3)
+  createdAt  DateTime      @default(now())
+  lignes     LigneTicket[]
+  paiements  PaiementTicket[]
+
+  @@unique([caisseId, numero])
+  @@index([societeId, date])
+  @@index([sessionId])
+  @@map("caisse_tickets")
+}
+
+model LigneTicket {
+  id              String       @id @default(uuid())
+  ticketId        String
+  ticket          TicketCaisse @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  articleId       String
+  article         Article      @relation(fields: [articleId], references: [id])
+  quantite        Decimal      @db.Decimal(12, 3)
+  // Prix de vente TTC d'une pièce (prix promo compris).
+  prixUnitaire    Decimal      @db.Decimal(12, 3)
+  tauxTva         Decimal      @db.Decimal(5, 2)
+  remise          Decimal      @default(0) @db.Decimal(12, 3)
+  montantTTC      Decimal      @db.Decimal(12, 3)
+  montantHT       Decimal      @db.Decimal(12, 3)
+  quantiteOfferte Decimal      @default(0) @db.Decimal(12, 3)
+  promotionId     String?
+  ordre           Int          @default(0)
+
+  @@index([ticketId])
+  @@index([articleId])
+  @@map("caisse_tickets_lignes")
+}
+
+model PaiementTicket {
+  id        String              @id @default(uuid())
+  ticketId  String
+  ticket    TicketCaisse        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  mode      ModeReglementCaisse
+  montant   Decimal             @db.Decimal(12, 3)
+  // TPE : n° d'autorisation du ticket de carte ; chèque : n° du chèque.
+  reference String?
+  // Ticket restaurant : commission de l'émetteur (taux de la société au moment de la vente).
+  commission Decimal            @default(0) @db.Decimal(12, 3)
+
+  @@index([ticketId])
+  @@map("caisse_tickets_paiements")
+}
+
+enum TypeMouvementCaisse {
+  PRELEVEMENT
+  APPORT
+}
+
+// Prélèvement (espèces retirées du tiroir) ou apport en cours de session.
+model MouvementCaisse {
+  id        String              @id
+  sessionId String
+  session   SessionCaisse       @relation(fields: [sessionId], references: [id])
+  type      TypeMouvementCaisse
+  montant   Decimal             @db.Decimal(12, 3)
+  motif     String?
+  date      DateTime
+
+  @@index([sessionId])
+  @@map("caisse_mouvements")
 }

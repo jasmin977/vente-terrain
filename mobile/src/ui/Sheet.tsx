@@ -18,6 +18,8 @@ interface SheetProps {
   footer?: ReactNode;
   /** "full" for long, searchable content; "auto" for short menus. */
   height?: "full" | "auto";
+  /** Web : boîte de dialogue plus large (tableaux). */
+  large?: boolean;
   children: ReactNode;
 }
 
@@ -33,6 +35,7 @@ export default function Sheet({
   toolbar,
   footer,
   height = "full",
+  large,
   children,
 }: SheetProps) {
   const full = height === "full";
@@ -41,7 +44,7 @@ export default function Sheet({
   const dialogue = useEcranLarge();
   return (
     <IonModal
-      className={`rc-sheet${full ? "" : " rc-sheet--auto"}`}
+      className={`rc-sheet${full ? "" : " rc-sheet--auto"}${large ? " rc-sheet--large" : ""}`}
       isOpen={isOpen}
       onIonModalWillPresent={onWillPresent}
       onDidDismiss={onDismiss}

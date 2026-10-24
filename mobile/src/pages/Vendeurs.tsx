@@ -71,7 +71,7 @@ export default function Vendeurs() {
 
   return (
     <IonPage>
-      <AppHeader backHref={enWeb ? undefined : "/factures"} title={t("Vendeurs")}>
+      <AppHeader backHref={enWeb ? undefined : "/factures"} title={t("Liste des vendeurs")}>
         <SearchField value={query} onChange={setQuery} placeholder={t("Nom, code, téléphone…")} />
       </AppHeader>
 

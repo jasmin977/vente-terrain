@@ -58,7 +58,7 @@ export default function Categories() {
 
   return (
     <IonPage>
-      <AppHeader backHref="/stock" title={t("Catégories")} />
+      <AppHeader backHref="/stock" title={t("Liste des catégories")} />
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
 

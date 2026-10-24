@@ -27,3 +27,14 @@ keystore.properties
 # Fichiers Excel de la société (prix d'achat, marges, stock) : données réelles, jamais dans le dépôt public
 *.xlsx
 *.xls
+
+# Vidéos de démonstration générées
+demo-videos/
+
+# Application Collecte (PDA) : builds
+mobile/collecte/dist/
+mobile/collecte/*.apk
+backups/
+
+# Installateur de la caisse (electron-builder)
+caisse/release/

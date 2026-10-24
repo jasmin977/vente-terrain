@@ -9,6 +9,8 @@ import * as categoriesApi from "../api/categories";
 import * as clientsApi from "../api/clients";
 import * as creditsApi from "../api/credits";
 import * as facturesApi from "../api/factures";
+import * as promotionsApi from "../api/promotions";
+import type { Promotion } from "../types/promotion";
 import { ApiError, apiRequest, estErreurReseau } from "../api/client";
 import type { Article } from "../types/article";
 import type { Categorie } from "../types/categorie";
@@ -145,6 +147,12 @@ export async function listArticles(filtres: articlesApi.ArticleFilters = {}): Pr
   return articles;
 }
 
+/** Promotions en cours (et de la semaine) : appliquées sur les BL, y compris hors ligne. */
+export async function listPromotionsActives(): Promise<Promotion[]> {
+  if (!modeHorsLigne()) return promotionsApi.listPromotionsActives();
+  return frais("promotions", "/promotions/actives");
+}
+
 /** Catégories des articles (filtre du catalogue, y compris hors ligne). */
 export async function listCategories(): Promise<Categorie[]> {
   if (!modeHorsLigne()) return categoriesApi.listCategories();
@@ -163,7 +171,7 @@ export async function listClients(q?: string): Promise<Client[]> {
   const clients = await clientsVendeur();
   const r = q?.trim().toLowerCase();
   if (!r) return clients;
-  return clients.filter((c) => [c.code, c.nomCommerce, c.ville].some((v) => v?.toLowerCase().includes(r)));
+  return clients.filter((c) => [c.ref, c.code, c.nomCommerce, c.ville].some((v) => String(v ?? "").toLowerCase().includes(r)));
 }
 
 export async function getClient(id: string): Promise<Client> {
@@ -328,11 +336,12 @@ export async function createFacture(input: FactureInput): Promise<Facture> {
   const lignes: LigneFacture[] = input.lignes.map((l) => {
     const article = articles.find((a) => a.id === l.articleId);
     if (!article) throw new ApiError(404, t("Article introuvable"));
-    const ht = l.quantite * l.prixUnitaire;
+    // Remise de promotion déduite, comme sur le serveur.
+    const ht = Math.max(0, l.quantite * l.prixUnitaire - (l.remise ?? 0));
     return { id: crypto.randomUUID(), ...l, montantHT: arrondi(ht), montantTTC: arrondi(ht * (1 + l.tauxTva / 100)), article };
   });
-  const montantHT = arrondi(lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0));
-  const montantTTC = arrondi(lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire * (1 + l.tauxTva / 100), 0));
+  const montantHT = arrondi(lignes.reduce((s, l) => s + Number(l.montantHT), 0));
+  const montantTTC = arrondi(lignes.reduce((s, l) => s + Number(l.montantTTC), 0));
 
   const id = crypto.randomUUID();
   const numero = await reserverNumero(vendeur.code);

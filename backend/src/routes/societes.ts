@@ -30,6 +30,8 @@ const societeSchema = z.object({
   adresse: optionnel,
   telephone: optionnel,
   logo: optionnel,
+  // Dépôt (distribution) ou supermarché (avec caisses).
+  type: z.enum(["DEPOT", "SUPERMARCHE"]).optional(),
 });
 
 const premiereErreur = (err: z.ZodError) => err.issues[0]?.message ?? "Données invalides";

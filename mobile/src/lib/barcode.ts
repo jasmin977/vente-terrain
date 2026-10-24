@@ -33,3 +33,34 @@ export async function scannerCodeBarre(): Promise<ScanResult> {
     return { error: t("Échec du scan du code-barres") };
   }
 }
+
+/**
+ * Scan en continu (plusieurs articles à la suite) : la caméra tourne derrière l'application, chaque code lu est
+ * envoyé à `onCode`. Renvoie la fonction qui arrête la caméra. La page doit être transparente pendant le scan
+ * (classe « scan-continu » sur la racine du document).
+ */
+export async function demarrerScanContinu(onCode: (code: string) => void): Promise<{ arreter: () => Promise<void> } | { error: string }> {
+  if (!scanCameraDisponible()) return { error: t("Le scan du code-barres n'est disponible que dans l'application mobile.") };
+  try {
+    const { camera } = await BarcodeScanner.requestPermissions();
+    if (camera !== "granted" && camera !== "limited") return { error: t("Autorisation caméra refusée") };
+    const ecoute = await BarcodeScanner.addListener("barcodesScanned", (e) => {
+      for (const b of e.barcodes) {
+        const code = b.rawValue?.trim();
+        if (code) onCode(code);
+      }
+    });
+    document.documentElement.classList.add("scan-continu");
+    await BarcodeScanner.startScan();
+    return {
+      arreter: async () => {
+        document.documentElement.classList.remove("scan-continu");
+        await ecoute.remove();
+        await BarcodeScanner.stopScan().catch(() => undefined);
+      },
+    };
+  } catch {
+    document.documentElement.classList.remove("scan-continu");
+    return { error: t("Impossible d'ouvrir la caméra") };
+  }
+}

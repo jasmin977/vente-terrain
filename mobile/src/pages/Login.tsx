@@ -58,9 +58,16 @@ export default function Login() {
                 autoCorrect="off"
                 spellCheck={false}
                 enterKeyHint="next"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    document.getElementById("login-password")?.focus();
+                  }
+                }}
                 required
               />
               <Field
+                id="login-password"
                 label={t("Mot de passe")}
                 type={showPassword ? "text" : "password"}
                 value={password}

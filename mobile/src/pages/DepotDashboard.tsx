@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Capacitor } from "@capacitor/core";
 import { calendarOutline, closeCircle, cubeOutline, folderOpenOutline, hourglassOutline, pricetagOutline } from "ionicons/icons";
 import { useNavigate } from "react-router-dom";
 import { getPeremption } from "../api/stock";
 import type { Peremption } from "../types/lot";
 import type { StockDepotItem, VentesParArticle } from "../types/stock";
 import { formatAmount, formatColis, pieces } from "../utils/format";
-import { BarRanking, Button, Group, Money, Notice, Row, Section, Segmented } from "../ui";
+import { BarRanking, Group, Money, Notice, Row, Section, Segmented } from "../ui";
 import type { BarRankingItem } from "../ui/BarRanking";
 import { t, tn } from "../i18n";
 
@@ -118,14 +117,6 @@ export default function DepotDashboard({
 
   return (
     <div className="rc-grille">
-      {/* Le plan 3D du dépôt n'existe que sur le web (pas dans l'application du téléphone). */}
-      {!Capacitor.isNativePlatform() && (
-        <Section className="rc-span">
-          <Button variant="secondary" block icon={cubeOutline} onClick={() => navigate("/stock/entrepot")}>
-            {t("Voir l'entrepôt en 3D")}
-          </Button>
-        </Section>
-      )}
       <Section label={t("Valeur du dépôt")}>
         <Group>
           <Row compact label={t("Au prix de vente HT")} trailing={<Money value={valeurs.vente} size="lg" />} />

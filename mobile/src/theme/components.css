@@ -193,6 +193,112 @@
   transition: background-color var(--rc-dur-base) var(--rc-ease);
 }
 
+/* Cloche des notifications : pastille du nombre de nouveautés. */
+.rc-notif {
+  position: relative;
+}
+
+.rc-notif__badge {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--rc-danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--rc-bg);
+}
+
+/* Ligne de notification : la pastille du type d'alerte (rouge, orange, bleu) au-dessus, puis le nom. */
+.rc-notif__ligne {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Une couleur par type d'alerte : fond teinté et texte de la même teinte (clair et sombre). */
+.rc-notif__ligne .rc-notif__tag {
+  background: color-mix(in srgb, var(--rc-notif-c) 17%, transparent);
+  color: var(--rc-notif-c);
+}
+
+.rc-notif__tag--RUPTURE {
+  --rc-notif-c: #d9453a;
+}
+
+.rc-notif__tag--STOCK_BAS {
+  --rc-notif-c: #e0791a;
+}
+
+.rc-notif__tag--EXPIRE {
+  --rc-notif-c: #c2307a;
+}
+
+.rc-notif__tag--EXPIRE_BIENTOT {
+  --rc-notif-c: #a87900;
+}
+
+.rc-notif__tag--CREDIT_RETARD {
+  --rc-notif-c: #7c55d9;
+}
+
+.rc-notif__tag--NOUVEL_ARTICLE {
+  --rc-notif-c: #2f6fdb;
+}
+
+.rc-notif__tag--NOUVEAUX_ARTICLES {
+  --rc-notif-c: #17998e;
+}
+
+.rc-notif__tag--A_COMPLETER {
+  --rc-notif-c: #7d766e;
+}
+
+.rc-notif__ligne .rc-tag {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.rc-notif__ligne .rc-tag ion-icon {
+  vertical-align: -2px;
+}
+
+.rc-notif__nom {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Alerte pas encore lue. */
+.rc-notif__point {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rc-accent, var(--rc-ink));
+}
+
+.rc-notif__tout-lu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--rc-space-3);
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--rc-ink-2);
+  font: inherit;
+  font-size: var(--rc-text-callout);
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .rc-iconbtn ion-icon {
   font-size: 22px;
 }
@@ -3469,4 +3575,500 @@ ion-content.rc-entrepot-page {
   height: 100%;
   border-radius: 3px;
   background: var(--rc-accent);
+}
+
+/* Champ date jj/mm/aaaa : sélecteur natif caché, ouvert par le bouton calendrier. */
+.rc-field__suffix:has(.rc-field__datepicker) {
+  position: relative;
+}
+.rc-field__datebtn {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--rc-ink-3);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.rc-field__datepicker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rc-line__error--warning {
+  color: var(--rc-warning);
+}
+
+/* Fiche article › stock par date d'expiration */
+/* Chiffres clés du stock : dépôt, camions, stock minimum (trois cartes égales). */
+.rc-stock-chiffres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--rc-space-3);
+  margin: var(--rc-space-4) var(--rc-gutter) 0;
+}
+
+.rc-stock-chiffre {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-stock-chiffre__titre {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-stock-chiffre__valeur {
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--rc-ink);
+}
+
+.rc-stock-chiffre__valeur small {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rc-ink-2);
+}
+
+.rc-stock-chiffre__note {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-lots__provenance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rc-lots__provenance > span {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+/* ---------- Fiche article : en-tête fixe et onglets ---------- */
+.rc-article-entete {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-4);
+  margin: var(--rc-space-3) var(--rc-gutter) 0;
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-article-entete__corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+}
+
+.rc-article-entete__nom {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rc-ink);
+}
+
+.rc-article-entete__prix {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+}
+
+.rc-article-entete__prix > span {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+@media (max-width: 640px) {
+  .rc-article-entete {
+    flex-wrap: wrap;
+  }
+
+  .rc-article-entete__prix {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+}
+
+.rc-article-onglets {
+  margin: var(--rc-space-3) var(--rc-gutter) var(--rc-space-1);
+}
+
+.rc-onglet__vide {
+  margin: var(--rc-space-4) var(--rc-gutter);
+}
+
+/* Historique des prix : une carte par prix (courbe, actuel, plus bas, plus haut). */
+.rc-prix-cartes,
+.rc-fourn-cartes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--rc-space-3);
+  margin: var(--rc-space-3) var(--rc-gutter);
+}
+
+.rc-prix-carte,
+.rc-fourn-carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  padding: var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-prix-carte__tete,
+.rc-fourn-carte__tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-2);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-fourn-carte__tete {
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--rc-ink);
+}
+
+.rc-prix-carte__chiffres,
+.rc-fourn-carte dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--rc-space-2);
+  margin: 0;
+  padding-top: var(--rc-space-2);
+  border-top: 1px solid var(--rc-line);
+}
+
+.rc-prix-carte__chiffres dt,
+.rc-fourn-carte dt {
+  font-size: 12px;
+  color: var(--rc-ink-2);
+}
+
+.rc-prix-carte__chiffres dd,
+.rc-fourn-carte dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+  font-weight: 700;
+  color: var(--rc-ink);
+}
+
+.rc-fourn-carte dd small {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--rc-ink-2);
+}
+
+/* Ligne d'un changement de prix : achat et vente côte à côte. */
+.rc-prix-ligne {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-4);
+}
+
+.rc-prix-ligne > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rc-prix-ligne small {
+  font-size: 12px;
+  color: var(--rc-ink-2);
+}
+
+/* En-tête de la fiche article : le prix de vente TTC bien lisible. */
+.rc-article-entete .rc-article-entete__prix .rc-money {
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.rc-article-entete .rc-article-entete__prix .rc-money__unit {
+  font-size: 14px;
+}
+
+.rc-collecte__deja {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--rc-accent-soft);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rc-ink);
+}
+
+/* BL : promotion appliquée sur une ligne (prix barré, badge). */
+.rc-promo-bl {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--rc-positive-soft, #e7f7ee);
+  color: var(--rc-positive, #16794a);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rc-promo-bl--attente {
+  background: var(--rc-fill);
+  color: var(--rc-ink-2);
+}
+
+.rc-promo-bl__ancien {
+  margin-right: 6px;
+  color: var(--rc-ink-3);
+}
+
+/* ---------- Scan de plusieurs articles (caméra derrière l'application) ---------- */
+/* Pendant le scan, l'application devient transparente : seule la vue de scan reste, la caméra se voit dessous. */
+html.scan-continu,
+html.scan-continu body {
+  background: transparent !important;
+  --ion-background-color: transparent;
+}
+
+html.scan-continu #root {
+  visibility: hidden;
+}
+
+.rc-scanmulti {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  visibility: visible;
+}
+
+.rc-scanmulti__haut {
+  display: flex;
+  align-items: center;
+  padding: calc(var(--ion-safe-area-top, 0px) + 12px) 14px 14px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+}
+
+.rc-scanmulti__haut > div {
+  display: flex;
+  flex-direction: column;
+  margin-left: 12px;
+}
+
+.rc-scanmulti__haut strong {
+  font-size: 17px;
+}
+
+.rc-scanmulti__haut span {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.rc-scanmulti__rond {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 24px;
+}
+
+.rc-scanmulti__visee {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+}
+
+/* Cadre de visée : coins blancs, ligne rouge qui balaie. */
+.rc-scanmulti__cadre {
+  position: relative;
+  width: 72%;
+  max-width: 320px;
+  height: 130px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.35);
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+}
+
+.rc-scanmulti__cadre::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 2px;
+  background: #ff4d4d;
+  box-shadow: 0 0 10px #ff4d4d;
+  animation: rc-balayage 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes rc-balayage {
+  from {
+    transform: translateY(-45px);
+  }
+  to {
+    transform: translateY(45px);
+  }
+}
+
+.rc-scanmulti__bas {
+  display: flex;
+  flex-direction: column;
+  max-height: 52vh;
+  padding: 12px 14px calc(var(--ion-safe-area-bottom, 0px) + 14px);
+  border-radius: 22px 22px 0 0;
+  background: var(--rc-surface, #fff);
+  color: var(--rc-ink, #111);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.rc-scanmulti__retour {
+  display: flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--rc-positive-soft, #e7f7ee);
+  color: var(--rc-positive, #16794a);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.rc-scanmulti__retour ion-icon {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  font-size: 20px;
+}
+
+.rc-scanmulti__retour--ko {
+  background: #fff4e0;
+  color: #b45309;
+}
+
+.rc-scanmulti__retour--attente {
+  background: var(--rc-fill, #f1f3f6);
+  color: var(--rc-ink-2, #555);
+}
+
+.rc-scanmulti__liste {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.rc-scanmulti__liste li {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rc-line, #e5e7eb);
+}
+
+.rc-scanmulti__nom {
+  flex: 1;
+  min-width: 0;
+  margin: 0 10px;
+  overflow: hidden;
+  font-weight: 600;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-scanmulti__qte {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--rc-fill, #f1f3f6);
+}
+
+.rc-scanmulti__qte button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--rc-accent, #1f5fbf);
+  font-size: 20px;
+}
+
+.rc-scanmulti__qte strong {
+  min-width: 34px;
+  text-align: center;
+  font-size: 17px;
+}
+
+.rc-scanmulti__valider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--rc-accent, #1f5fbf);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.rc-scanmulti__valider ion-icon {
+  margin-right: 8px;
+  font-size: 20px;
+}
+
+.rc-scanmulti__valider:disabled {
+  opacity: 0.5;
 }

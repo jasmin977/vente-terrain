@@ -40,7 +40,7 @@ export default function Societes() {
 
   return (
     <IonPage>
-      <AppHeader large title={t("Sociétés")} actions={<AccountButton />} />
+      <AppHeader large title={t("Liste des sociétés")} actions={<AccountButton />} />
       <IonContent>
         {error && (
           <PageNotice actionLabel={t("Réessayer")} onAction={charger}>

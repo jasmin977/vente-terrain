@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { creerClientAvecRef } from "../services/clientRef";
 import { requireAuth, requireSociete } from "../middleware/auth";
 import { creerFacture } from "../services/factureService";
 
@@ -71,9 +72,12 @@ const pushSchema = z.object({
         lignes: z.array(
           z.object({
             articleId: z.string().uuid(),
-            quantite: z.number().positive(),
+            quantite: z.number().nonnegative(),
             prixUnitaire: z.number().nonnegative(),
             tauxTva: z.number().min(0).max(100),
+            quantiteOfferte: z.number().nonnegative().optional(),
+            remise: z.number().nonnegative().optional(),
+            promotionId: z.string().uuid().optional().nullable(),
           })
         ),
       })
@@ -141,7 +145,9 @@ syncRouter.post("/push", async (req, res) => {
       // Un client d'une autre société n'est jamais modifié.
       const autre = await prisma.client.findFirst({ where: { id: c.id, NOT: { societeId: req.societeId } }, select: { id: true } });
       if (autre) throw new Error("Client introuvable");
-      await prisma.client.upsert({ where: { id: c.id }, create: { ...c, societeId: req.societeId! }, update: c });
+      const existe = await prisma.client.findUnique({ where: { id: c.id }, select: { id: true } });
+      if (existe) await prisma.client.update({ where: { id: c.id }, data: c });
+      else await creerClientAvecRef({ ...c, societeId: req.societeId! });
       resultats.clients.push({ id: c.id, ok: true });
     } catch (err) {
       resultats.clients.push({ id: c.id, ok: false, error: (err as Error).message });

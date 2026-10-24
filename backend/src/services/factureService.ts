@@ -4,10 +4,19 @@ import { prochainNumeroFacture } from "../utils/numero";
 
 export interface LigneFactureInput {
   articleId: string;
+  /** Pièces payées (0 pour un article seulement offert). */
   quantite: number;
   prixUnitaire: number;
   tauxTva: number;
+  /** Promotion : pièces offertes en plus, et remise HT sur la ligne. */
+  quantiteOfferte?: number;
+  remise?: number;
+  promotionId?: string | null;
 }
+
+/** Pièces qui sortent du camion pour une ligne : payées + offertes. */
+export const piecesSorties = (l: { quantite: number | Prisma.Decimal; quantiteOfferte?: number | Prisma.Decimal | null }) =>
+  Number(l.quantite) + Number(l.quantiteOfferte ?? 0);
 
 export interface CreerFactureInput {
   id?: string;
@@ -44,7 +53,9 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
   const lignesCalc = data.lignes.map((l) => {
     const article = articleMap.get(l.articleId);
     if (!article) throw new Error(`Article ${l.articleId} introuvable`);
-    const ht = l.quantite * l.prixUnitaire;
+    // Remise de promotion, jamais plus que la ligne elle-même.
+    const remise = Math.min(Math.max(0, l.remise ?? 0), l.quantite * l.prixUnitaire);
+    const ht = l.quantite * l.prixUnitaire - remise;
     const tva = (ht * l.tauxTva) / 100;
     montantHT += ht;
     montantTVA += tva;
@@ -55,6 +66,9 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
   // Deux factures simultanées du même vendeur peuvent viser le même numéro
   // séquentiel : la contrainte d'unicité refuse la seconde, on rejoue alors la
   // transaction entière (Postgres l'a annulée) avec le numéro suivant.
+  // Un numéro réservé hors ligne (autre vendeur, même séquence) peut être déjà
+  // pris : le serveur attribue alors le suivant.
+  let numeroPropose = data.numero;
   for (let essai = 1; ; essai++) {
     try {
       return await creerDansTransaction();
@@ -63,7 +77,8 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002" &&
         String(err.meta?.target ?? "").includes("numero");
-      if (!conflitNumero || data.numero || essai >= 5) throw err;
+      if (!conflitNumero || essai >= 5) throw err;
+      numeroPropose = undefined;
     }
   }
 
@@ -75,8 +90,8 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
     for (const l of data.lignes) {
       await tx.stockCamion.upsert({
         where: { vendeurId_articleId: { vendeurId, articleId: l.articleId } },
-        create: { vendeurId, articleId: l.articleId, quantite: -l.quantite },
-        update: { quantite: { decrement: l.quantite } },
+        create: { vendeurId, articleId: l.articleId, quantite: -piecesSorties(l) },
+        update: { quantite: { decrement: piecesSorties(l) } },
       });
     }
 
@@ -84,7 +99,7 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
     const created = await tx.facture.create({
       data: {
         id: data.id,
-        numero: data.numero ?? (await prochainNumeroFacture(tx, vendeur.code, data.date ?? new Date())),
+        numero: numeroPropose ?? (await prochainNumeroFacture(tx, data.date ?? new Date())),
         clientId: data.clientId,
         vendeurId,
         date: data.date ?? new Date(),
@@ -103,11 +118,14 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
             tauxTva: l.tauxTva,
             montantHT: l.montantHT,
             montantTTC: l.montantTTC,
+            quantiteOfferte: l.quantiteOfferte ?? 0,
+            remise: Math.min(Math.max(0, l.remise ?? 0), l.quantite * l.prixUnitaire),
+            promotionId: l.promotionId ?? null,
           })),
         },
       },
       // vendeur : imprimé sur le ticket juste après la vente.
-      include: { lignes: { include: { article: true } }, client: true, vendeur: { select: { id: true, nom: true, code: true } } },
+      include: { lignes: { include: { article: true, promotion: { select: { numero: true, type: true, mode: true } } } }, client: true, vendeur: { select: { id: true, nom: true, code: true } } },
     });
 
     // Historique camion : la vente porte le numéro de facture et le client.
@@ -117,7 +135,7 @@ export async function creerFacture(vendeurId: string, data: CreerFactureInput, s
           vendeurId,
           articleId: l.articleId,
           sens: "VENTE",
-          quantite: l.quantite,
+          quantite: piecesSorties(l),
           date: created.date,
           reference: `${created.numero} · ${created.client.nomCommerce}`,
         },

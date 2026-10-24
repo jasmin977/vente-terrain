@@ -158,6 +158,11 @@ export default function FactureDetail() {
                 ) : (
                   <Tag tone="ink">{statutLabel.VALIDEE}</Tag>
                 )}
+                {facture.factureVenteId && (
+                  <Tag tone="info" dot>
+                    {facture.factureVente?.numero ? t("Facturé · {n}", { n: facture.factureVente.numero }) : t("Facturé")}
+                  </Tag>
+                )}
                 {annulee ? (
                   <Tag tone={typeVenteTone[facture.typeVente]} dot>
                     {typeVenteLabel[facture.typeVente]}
@@ -196,6 +201,9 @@ export default function FactureDetail() {
                     meta={
                       <span className="rc-num">
                         {Number(l.quantite)} × {formatAmount(l.prixUnitaire)} · {t("TVA")} {Number(l.tauxTva)} %
+                        {Number(l.quantiteOfferte ?? 0) > 0 && ` · ${t("+{n} offert(s)", { n: Number(l.quantiteOfferte) })}`}
+                        {Number(l.remise ?? 0) > 0 && ` · ${t("remise {m}", { m: formatAmount(Number(l.remise)) })}`}
+                        {l.promotion && <span className="rc-promo-bl">{l.promotion.numero}</span>}
                       </span>
                     }
                     trailing={<Money value={l.montantTTC} />}
@@ -237,7 +245,7 @@ export default function FactureDetail() {
               </div>
             </Section>
 
-            {isAdmin && facture.statut === "VALIDEE" && (
+            {isAdmin && facture.statut === "VALIDEE" && !facture.factureVenteId && (
               <Section>
                 <Button
                   variant="danger"

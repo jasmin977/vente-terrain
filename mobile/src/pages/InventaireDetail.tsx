@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { IonAlert, IonContent, IonPage } from "@ionic/react";
-import { addOutline, checkmarkDoneOutline, searchOutline, trashOutline } from "ionicons/icons";
+import { addOutline, checkmarkDoneOutline, phonePortraitOutline, searchOutline, trashOutline } from "ionicons/icons";
 import {
   abandonnerInventaire,
   enregistrerComptage,
@@ -13,9 +13,11 @@ import { listArticles } from "../api/articles";
 import type { Article } from "../types/article";
 import type { Inventaire, LigneInventaire, LigneInventaireInput } from "../types/inventaire";
 import { useAuth } from "../auth/AuthContext";
+import ImportCollecteSheet, { type LigneImportee } from "../components/ImportCollecteSheet";
 import { ApiError } from "../api/client";
 import ArticleImage from "../components/ArticleImage";
 import InventaireCountSheet, { type LigneACompter } from "./InventaireCountSheet";
+import InventaireTableau, { type InventaireTableauHandle } from "../components/InventaireTableau";
 import { formatAmount, formatColis, formatDateTime, joinMeta } from "../utils/format";
 import { motifEcartLabel, statutInventaireLabel } from "../utils/labels";
 import { articleCorrespond, articleMotsCles, articleParCode } from "../utils/articleSearch";
@@ -33,10 +35,14 @@ import {
   Segmented,
   SkeletonList,
   Tag,
+  useEcranLarge,
 } from "../ui";
 import { t, tn } from "../i18n";
 
 type Filtre = "a_compter" | "comptes" | "ecarts" | "tous";
+
+/** Rafraîchissement du résumé après une saisie rapide : groupé pour ne pas relire l'inventaire à chaque Entrée. */
+const DELAI_RAFRAICHISSEMENT = 900;
 
 function EcartTag({ ecart }: { ecart: number }) {
   if (ecart === 0) return <Tag tone="positive">{t("Conforme")}</Tag>;
@@ -60,6 +66,20 @@ export default function InventaireDetail() {
   const [ajoutOpen, setAjoutOpen] = useState(false);
   const [confirm, setConfirm] = useState<"valider" | "abandonner" | null>(null);
   const [busy, setBusy] = useState(false);
+  // Web : comptage dans un tableau (une cellule par article) au lieu d'une fenêtre par article.
+  const web = useEcranLarge();
+  const tableau = useRef<InventaireTableauHandle>(null);
+  const rafraichir = useRef<number | undefined>(undefined);
+  // Articles trouvés hors liste, ajoutés au tableau et pas encore comptés.
+  const [ajouts, setAjouts] = useState<LigneInventaire[]>([]);
+
+  const [importPda, setImportPda] = useState(false);
+  // Collecte du PDA : la quantité scannée devient la quantité comptée de chaque article.
+  const importerCollecte = async (importees: LigneImportee[]) => {
+    for (const imp of importees) await enregistrerComptage(id!, imp.articleId, { quantiteReelle: imp.quantite, motif: null, note: null });
+    await charger();
+    return 0;
+  };
 
   const charger = useCallback(async () => {
     try {
@@ -77,11 +97,18 @@ export default function InventaireDetail() {
   useEffect(() => {
     charger().then((data) => {
       if (data?.statut === "VALIDE") setFiltre("ecarts");
+      else if (data && web) setFiltre("tous");
     });
+    // `web` ne change pas en cours de route : le filtre de départ ne se recalcule pas
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charger]);
 
   const enCours = inv?.statut === "EN_COURS";
-  const lignes = useMemo(() => inv?.lignes ?? [], [inv]);
+  const lignes = useMemo(() => {
+    const serveur = inv?.lignes ?? [];
+    const connus = new Set(serveur.map((l) => l.articleId));
+    return [...serveur, ...ajouts.filter((a) => !connus.has(a.articleId))];
+  }, [inv, ajouts]);
   const q = query.trim();
   const visibles = useMemo(
     () =>
@@ -94,6 +121,43 @@ export default function InventaireDetail() {
       }),
     [lignes, filtre, q]
   );
+
+  // Web : à l'ouverture, le curseur est déjà dans la première cellule à compter.
+  const dejaFocus = useRef(false);
+  useEffect(() => {
+    if (web && enCours && visibles.length > 0 && !dejaFocus.current) {
+      dejaFocus.current = true;
+      window.setTimeout(() => tableau.current?.focusPremiere(), 200);
+    }
+  }, [web, enCours, visibles.length]);
+
+  // Tableau (web) : enregistre le comptage tout de suite dans l'affichage, puis sur le serveur ; le résumé se met à jour juste après.
+  const sauverRapide = async (articleId: string, quantite: number) => {
+    const ligne = lignes.find((l) => l.articleId === articleId);
+    if (!ligne) return;
+    const maj = { ...ligne, quantiteReelle: quantite, ecart: quantite - ligne.quantiteTheorique };
+    setInv((prev) => (prev ? { ...prev, lignes: prev.lignes.some((l) => l.articleId === articleId) ? prev.lignes.map((l) => (l.articleId === articleId ? maj : l)) : [...prev.lignes, maj] } : prev));
+    setAjouts((a) => a.filter((x) => x.articleId !== articleId));
+    try {
+      // Le motif et la note déjà saisis sont conservés (le tableau ne change que la quantité).
+      await enregistrerComptage(id!, articleId, { quantiteReelle: quantite, motif: quantite < ligne.quantiteTheorique ? ligne.motif : null, note: ligne.note });
+      window.clearTimeout(rafraichir.current);
+      rafraichir.current = window.setTimeout(() => void charger(), DELAI_RAFRAICHISSEMENT);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("Échec de l'enregistrement du comptage"));
+      await charger();
+    }
+  };
+
+  // Ajoute un article trouvé hors liste au tableau et place le curseur dans sa cellule.
+  const ajouterAuTableau = (article: Article) => {
+    if (!lignes.some((l) => l.articleId === article.id)) {
+      setAjouts((a) => [...a, { articleId: article.id, article, quantiteTheorique: 0, quantiteReelle: null, ecart: null, motif: null, note: null }]);
+    }
+    setQuery("");
+    setFiltre("tous");
+    window.setTimeout(() => tableau.current?.focus(article.id), 80);
+  };
 
   const ouvrirComptage = (l: Pick<LigneInventaire, "article" | "quantiteTheorique" | "quantiteReelle" | "motif" | "note">) =>
     setEnComptage({ article: l.article, quantiteTheorique: l.quantiteTheorique, quantiteReelle: l.quantiteReelle, motif: l.motif, note: l.note });
@@ -132,7 +196,11 @@ export default function InventaireDetail() {
     const ligne = articleParCode(lignes.map((l) => l.article), code);
     if (ligne) {
       const l = lignes.find((x) => x.articleId === ligne.id)!;
-      if (enCours) ouvrirComptage(l);
+      if (enCours && web) {
+        setQuery("");
+        setFiltre("tous");
+        window.setTimeout(() => tableau.current?.focus(l.articleId), 80);
+      } else if (enCours) ouvrirComptage(l);
       else setQuery(code);
       return;
     }
@@ -148,7 +216,8 @@ export default function InventaireDetail() {
       }
       const article = articleParCode(cat, code);
       if (article) {
-        ouvrirComptage({ article, quantiteTheorique: 0, quantiteReelle: null, motif: null, note: null });
+        if (web) ajouterAuTableau(article);
+        else ouvrirComptage({ article, quantiteTheorique: 0, quantiteReelle: null, motif: null, note: null });
         return;
       }
     }
@@ -199,11 +268,18 @@ export default function InventaireDetail() {
   const depot = inv?.lieu === "DEPOT";
 
   return (
-    <IonPage>
+    <IonPage className={web ? "rc-page--large" : undefined}>
       <AppHeader
         backHref="/inventaires"
-        title={inv ? (inv.vendeur ? t("Camion de {nom}", { nom: inv.vendeur.nom }) : t("Dépôt")) : t("Inventaire")}
+        title={inv ? (inv.vendeur ? t("Camion de {nom}", { nom: inv.vendeur.nom }) : inv.libelle ?? t("Tout le dépôt")) : t("Inventaire")}
         eyebrow={inv ? t("Inventaire · {date}", { date: formatDateTime(inv.statut === "VALIDE" ? inv.dateValidation ?? inv.createdAt : inv.createdAt) }) : undefined}
+        actions={
+          web && enCours && r ? (
+            <Button icon={checkmarkDoneOutline} disabled={r.nbComptes === 0} loading={busy} onClick={() => setConfirm("valider")}>
+              {t("Valider l'inventaire")}
+            </Button>
+          ) : undefined
+        }
       />
 
       <IonContent>
@@ -257,6 +333,7 @@ export default function InventaireDetail() {
                 options={
                   enCours
                     ? [
+                        ...(web ? [{ value: "tous" as Filtre, label: t("Tous"), hint: `${r.nbLignes}` }] : []),
                         { value: "a_compter", label: t("À compter"), hint: `${nonComptes}` },
                         { value: "comptes", label: t("Comptés"), hint: `${r.nbComptes}` },
                         { value: "ecarts", label: t("Écarts"), hint: `${r.nbEcarts}` },
@@ -291,6 +368,8 @@ export default function InventaireDetail() {
                       : undefined
                   }
                 />
+              ) : web && enCours ? (
+                <InventaireTableau ref={tableau} lignes={visibles} modifiable onSauver={(articleId, q) => void sauverRapide(articleId, q)} />
               ) : (
                 <div className="rc-list">
                   {visibles.map((l) => {
@@ -335,6 +414,10 @@ export default function InventaireDetail() {
                 <Button variant="secondary" size="lg" block icon={addOutline} onClick={ouvrirAjout}>
                   {t("Article trouvé hors liste")}
                 </Button>
+                <Button variant="ghost" block icon={phonePortraitOutline} onClick={() => setImportPda(true)}>
+                  {t("Télécharger depuis le PDA")}
+                </Button>
+                <ImportCollecteSheet isOpen={importPda} onDismiss={() => setImportPda(false)} destination={t("Inventaire")} onImporter={importerCollecte} />
               </Section>
             )}
 
@@ -366,7 +449,7 @@ export default function InventaireDetail() {
         )}
       </IonContent>
 
-      {inv && enCours && r && (
+      {inv && enCours && r && !web && (
         <ActionBar
           hint={
             r.nbComptes === 0
@@ -401,6 +484,10 @@ export default function InventaireDetail() {
           setAjoutOpen(false);
           const existante = lignes.find((l) => l.articleId === articleId);
           const article = catalogue.find((a) => a.id === articleId);
+          if (web && (existante || article)) {
+            ajouterAuTableau((existante?.article ?? article)!);
+            return;
+          }
           if (existante) ouvrirComptage(existante);
           else if (article) ouvrirComptage({ article, quantiteTheorique: 0, quantiteReelle: null, motif: null, note: null });
         }}

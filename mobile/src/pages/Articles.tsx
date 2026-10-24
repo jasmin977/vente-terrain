@@ -12,7 +12,7 @@ import TriArticlesButton from "../components/TriArticlesButton";
 import FiltreCategorie from "../components/FiltreCategorie";
 import { filtrerParCategorie } from "../utils/categories";
 import { useCategories } from "../utils/useCategories";
-import { trierArticles, useTriArticles } from "../utils/triArticles";
+import { margeArticle, nomsCategorie, trierArticles, useTriArticles } from "../utils/triArticles";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import {
@@ -33,11 +33,13 @@ import {
   useListeProgressive,
   BoutonHaut,
   useRetourEnHaut,
+  useEcranLarge,
 } from "../ui";
 import { t, tn } from "../i18n";
 
 export default function Articles() {
   const navigate = useNavigate();
+  const web = useEcranLarge();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
   const [articles, setArticles] = useState<Article[]>([]);
@@ -49,7 +51,7 @@ export default function Articles() {
   const { categories } = useCategories();
   const [categorie, setCategorie] = useState<string | undefined>(undefined);
   const articlesFiltres = useMemo(() => filtrerParCategorie(articles, categories, categorie, (a) => a), [articles, categories, categorie]);
-  const articlesTries = useMemo(() => trierArticles(articlesFiltres, tri), [articlesFiltres, tri]);
+  const articlesTries = useMemo(() => trierArticles(articlesFiltres, tri, categories), [articlesFiltres, tri, categories]);
   const liste = useListeProgressive(articlesTries, `${query}|${categorie}|${tri.cle}|${tri.inverse}`);
 
   const fetchArticles = useCallback(async () => {
@@ -93,11 +95,27 @@ export default function Articles() {
 
   const firstLoad = loading && articles.length === 0;
 
+  // Largeurs (px) des colonnes : catégorie, sous-catégorie, marque, code-barres, (admin) prix d'achat, prix de vente.
+  const LARGEUR_CODE = 160;
+  const largeurs = isAdmin ? [220, 140, 180, 110] : [220, 140, 180];
+  // Colonnes du tableau : catégorie, sous-catégorie, marque, code-barres et (admin) prix d'achat TTC.
+  const cellulesArticle = (a: Article) => {
+    const { sous } = nomsCategorie(categories, a.categorieId);
+    return [sous, a.marque, <Money key="v" value={prixTTC(a)} />];
+  };
+  // Marge (admin) : rouge si négative, orange si proche de zéro.
+  const margeCellule = (a: Article) => {
+    const m = margeArticle(a);
+    if (m === undefined) return "—";
+    const classe = m < 0 ? " rc-marge--negative" : m < 3 ? " rc-marge--faible" : "";
+    return <span className={`rc-marge${classe}`}>{`${m.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}</span>;
+  };
+
   return (
-    <IonPage>
-      <AppHeader large title={t("Articles")} actions={<AccountButton />}>
+    <IonPage className="rc-page--large">
+      <AppHeader large title={t("Liste des articles")} actions={<AccountButton />}>
         <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />
-        <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />
+        {!web && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
       </AppHeader>
 
       <IonContent {...haut.contenu}>
@@ -117,11 +135,15 @@ export default function Articles() {
             !firstLoad && articles.length > 0 ? (
               <span className="rc-liste-tete">
                 <span>{tn(articlesTries.length, "{n} article", "{n} articles")}</span>
-                <TriArticlesButton value={tri} onChange={setTri} />
+                <span className="rc-tri-bouton">
+                  <TriArticlesButton value={tri} onChange={setTri} />
+                </span>
               </span>
             ) : undefined
           }
         >
+          {/* Web : le filtre de catégorie est juste au-dessus du tableau. */}
+          {web && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
           {firstLoad ? (
             <SkeletonList thumb />
           ) : !error && articles.length === 0 ? (
@@ -133,7 +155,21 @@ export default function Articles() {
           ) : (
             articles.length > 0 && (
               <>
-              <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Prix TTC")} vignette />
+              <EnteteTableau
+                titre={t("Désignation")}
+                premiere={{ label: t("Code-barres"), cle: "codeBarre", largeur: LARGEUR_CODE }}
+                colonnes={[t("Sous-catégorie"), t("Marque"), t("Prix de vente TTC")]}
+                dernier={isAdmin ? t("Marge") : ""}
+                largeurs={largeurs}
+                vignette
+                tri={{
+                  titre: "alpha",
+                  colonnes: ["sousCategorie", "marque", "prix"],
+                  dernier: isAdmin ? "marge" : undefined,
+                  valeur: tri,
+                  onChange: setTri,
+                }}
+              />
               <div className="rc-list">
                 {liste.visibles.map((article) => (
                   <Row
@@ -141,10 +177,23 @@ export default function Articles() {
                     className="rc-row--tableau"
                     thumb
                     onClick={() => navigate(`/articles/${article.id}`)}
-                    leading={<ArticleImage src={article.img} alt="" />}
+                    leading={
+                      web ? (
+                        <>
+                          <span className="rc-tableau__cellule rc-tableau__premiere rc-web-only--table" style={{ "--rc-col": `${LARGEUR_CODE}px` } as React.CSSProperties}>
+                            <span className="rc-tableau__texte">{article.codeBarre}</span>
+                          </span>
+                          <span className="rc-tableau__photo">
+                            <ArticleImage src={article.img} alt="" />
+                          </span>
+                        </>
+                      ) : (
+                        <ArticleImage src={article.img} alt="" />
+                      )
+                    }
                     title={article.designation}
                     meta={joinMeta([article.code, article.unit, article.marque])}
-                    trailing={<CellulesTableau valeurs={[article.marque, article.unit, article.codeBarre]} dernier={<Money value={prixTTC(article)} />} />}
+                    trailing={<CellulesTableau valeurs={cellulesArticle(article)} largeurs={largeurs} dernier={isAdmin ? margeCellule(article) : null} />}
                   />
                 ))}
                 <ChargerPlus reste={liste.reste} onPlus={liste.plus} />

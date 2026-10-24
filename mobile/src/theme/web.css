@@ -132,12 +132,54 @@
 
   .rc-sidenav__chevron {
     flex: 0 0 auto;
-    font-size: 16px;
-    transition: transform var(--rc-dur-base) var(--rc-ease);
+    font-size: 15px;
+    opacity: 0.7;
+    transition: transform 260ms cubic-bezier(0.3, 0.7, 0.2, 1);
   }
 
   .rc-sidenav__chevron--ouvert {
     transform: rotate(180deg);
+  }
+
+  .rc-sidenav__entree,
+  .rc-sidenav__sous-entree {
+    transition:
+      background-color 160ms ease,
+      color 160ms ease;
+  }
+
+  /* Rubriques : Commercial, Approvisionnement, Logistique, Rapports. */
+  .rc-sidenav__groupe + .rc-sidenav__groupe {
+    margin-top: var(--rc-space-2);
+  }
+
+  .rc-sidenav__groupe-titre {
+    margin: 0 0 var(--rc-space-1);
+    padding: 0 var(--rc-space-3);
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--rc-ink-3, var(--rc-ink-2));
+    opacity: 0.8;
+  }
+
+  /* Tiroir du sous-menu : la hauteur s'anime de 0 à son contenu (grille 0fr → 1fr). */
+  .rc-sidenav__tiroir {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 280ms cubic-bezier(0.3, 0.7, 0.2, 1);
+  }
+
+  .rc-sidenav__tiroir--ouvert {
+    grid-template-rows: 1fr;
+  }
+
+  .rc-sidenav__tiroir > .rc-sidenav__sous {
+    min-height: 0;
+    overflow: hidden;
   }
 
   /* Sous-menu : en retrait sous son entrée, filet à gauche. */
@@ -145,24 +187,78 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    margin: 2px 0 var(--rc-space-2);
-    margin-inline-start: calc(var(--rc-space-3) + 11px);
-    padding-inline-start: var(--rc-space-3);
+    margin-inline-start: calc(var(--rc-space-3) + 10px);
+    padding-inline-start: var(--rc-space-2);
     border-inline-start: 1px solid var(--rc-line-strong);
   }
 
+  .rc-sidenav__sous > li:first-child {
+    margin-top: 2px;
+  }
+
+  .rc-sidenav__sous > li:last-child {
+    margin-bottom: var(--rc-space-2);
+  }
+
+  /* Les sous-entrées glissent et apparaissent l'une après l'autre à l'ouverture, et s'effacent à la fermeture. */
+  .rc-sidenav__sous > li {
+    opacity: 0;
+    transform: translateX(-8px);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease;
+  }
+
+  .rc-sidenav__tiroir--ouvert .rc-sidenav__sous > li {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 240ms ease calc(60ms + var(--rc-rang, 0) * 35ms),
+      transform 280ms cubic-bezier(0.3, 0.7, 0.2, 1) calc(60ms + var(--rc-rang, 0) * 35ms);
+  }
+
   .rc-sidenav__sous-entree {
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-2);
     width: 100%;
-    min-height: 38px;
-    padding: 0 var(--rc-space-3);
+    min-height: 36px;
+    padding: 0 var(--rc-space-2);
     border: 0;
     border-radius: var(--rc-radius-sm);
     background: transparent;
     color: var(--rc-ink-2);
-    font-size: 14.5px;
+    font-size: 14px;
     font-weight: 600;
     text-align: start;
     cursor: pointer;
+  }
+
+  .rc-sidenav__sous-entree ion-icon {
+    flex: 0 0 auto;
+    font-size: 16px;
+    opacity: 0.75;
+  }
+
+  /* Un libellé long passe à la ligne (jamais coupé par « … »). */
+  .rc-sidenav__sous-entree span {
+    min-width: 0;
+    padding-block: 7px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .rc-sidenav__sous-entree--active ion-icon {
+    color: var(--rc-accent);
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rc-sidenav__tiroir,
+    .rc-sidenav__sous > li,
+    .rc-sidenav__chevron {
+      transition: none !important;
+    }
   }
 
   .rc-sidenav__sous-entree:hover {
@@ -286,6 +382,10 @@
     --border-radius: var(--rc-radius-lg);
   }
 
+  ion-modal.rc-sheet--large {
+    --width: min(980px, calc(100vw - 48px));
+  }
+
   ion-modal.rc-sheet--auto {
     --height: auto;
   }
@@ -306,7 +406,832 @@
   }
 }
 
+/* ---------- Tableau de bord (ordinateur) : cartes d'indicateurs, graphiques et classements ---------- */
+/* Période et mois côte à côte pour libérer de la hauteur. */
+.rc-dash-page .rc-appbar__below {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-dash-page .rc-appbar__below .rc-seg {
+  width: 420px;
+  max-width: 100%;
+}
+
+.rc-dash-page .rc-appbar__below .rc-daystep {
+  width: 320px;
+  max-width: 100%;
+}
+
+/* Le graphique des ventes remplit sa carte. */
+.rc-dash-card--evolution .rc-cols__plot {
+  height: 260px;
+}
+
+.rc-dash {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--rc-space-4);
+  padding: var(--rc-space-3) var(--rc-gutter) var(--rc-space-8);
+}
+
+.rc-dash > * {
+  min-width: 0;
+}
+
+.rc-dash-card {
+  grid-column: 1 / -1;
+  padding: var(--rc-space-5);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow:
+    0 0 0 1px var(--rc-line),
+    0 1px 2px rgba(26, 24, 22, 0.04);
+}
+
+.rc-dash-card__tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  margin-bottom: var(--rc-space-4);
+}
+
+.rc-dash-card__titre {
+  margin: 0;
+  font-size: var(--rc-text-callout);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.rc-dash-card__aside,
+.rc-dash-card__periode {
+  font-size: var(--rc-text-meta);
+  font-weight: 600;
+  color: var(--rc-ink-2);
+}
+
+.rc-dash-col {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+}
+
+.rc-dash-col > .rc-dash-card {
+  flex: 1;
+}
+
+/* Indicateurs clés */
+.rc-dash-kpi {
+  --k: var(--rc-accent);
+  grid-column: span 6;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  overflow: hidden;
+}
+
+.rc-dash-kpi--positive {
+  --k: var(--rc-positive);
+}
+
+.rc-dash-kpi--warning {
+  --k: var(--rc-warning);
+}
+
+.rc-dash-kpi--violet {
+  --k: #7c55d9;
+}
+
+.rc-dash-kpi__tete {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-dash-kpi__icone {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--k) 16%, transparent);
+  color: var(--k);
+  font-size: 20px;
+}
+
+.rc-dash-kpi__titre {
+  margin: 0;
+  font-size: var(--rc-text-callout);
+  font-weight: 700;
+  color: var(--rc-ink-2);
+}
+
+.rc-dash-kpi__valeur {
+  margin-top: var(--rc-space-1);
+}
+
+.rc-dash-kpi__vide {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--rc-ink-3);
+}
+
+.rc-dash-kpi__pied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+  min-height: 26px;
+}
+
+.rc-dash-kpi__note {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-dash-kpi__courbe {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin-top: var(--rc-space-1);
+}
+
+.rc-dash-kpi__courbe--vide {
+  height: 40px;
+}
+
+.rc-dash-kpi__aire {
+  fill: color-mix(in srgb, var(--k) 14%, transparent);
+  stroke: none;
+}
+
+.rc-dash-kpi__trait {
+  fill: none;
+  stroke: var(--k);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+.rc-dash-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rc-accent-ink);
+  font: inherit;
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rc-dash-lien:hover {
+  text-decoration: underline;
+}
+
+/* Anneau de répartition des encaissements */
+.rc-dash-anneau {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rc-space-5);
+}
+
+.rc-dash-anneau__rond {
+  display: grid;
+  place-items: center;
+  width: 184px;
+  height: 184px;
+  border-radius: 50%;
+}
+
+.rc-dash-anneau__trou {
+  display: grid;
+  place-items: center;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  background: var(--rc-surface);
+  text-align: center;
+}
+
+.rc-dash-anneau__legende {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-dash-anneau__legende li {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-dash-anneau__puce {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.rc-dash-anneau__nom {
+  flex: 1;
+  font-size: var(--rc-text-callout);
+  font-weight: 600;
+}
+
+.rc-dash-anneau__val {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rc-space-2);
+}
+
+.rc-dash-anneau__val small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+}
+
+/* Crédits, marge, stock */
+.rc-dash-credits__total {
+  margin-bottom: var(--rc-space-4);
+}
+
+.rc-dash-credits__total p {
+  margin: 0 0 var(--rc-space-1);
+}
+
+.rc-dash-card--credits .rc-rank__title {
+  margin-top: var(--rc-space-5);
+  margin-bottom: var(--rc-space-3);
+}
+
+.rc-dash-liste {
+  margin: 0;
+}
+
+.rc-dash-liste > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) 0;
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-dash-liste > div:last-child {
+  border-bottom: 0;
+}
+
+.rc-dash-liste dt {
+  font-size: var(--rc-text-callout);
+  color: var(--rc-ink-2);
+  font-weight: 600;
+}
+
+.rc-dash-liste dd {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--rc-space-2);
+}
+
+.rc-dash-liste dd small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+}
+
+.rc-dash-liste__total {
+  margin-top: var(--rc-space-1);
+}
+
+.rc-dash-card--plein .rc-notice,
+.rc-dash-card--plein .rc-page-notice {
+  margin-top: var(--rc-space-3);
+}
+
+@media (min-width: 1100px) {
+  .rc-dash-kpi {
+    grid-column: span 3;
+  }
+
+  .rc-dash-card--evolution {
+    grid-column: span 8;
+  }
+
+  .rc-dash-card--repartition {
+    grid-column: span 4;
+  }
+
+  .rc-dash-card--tiers {
+    grid-column: span 4;
+  }
+
+  .rc-dash-card--credits {
+    grid-column: span 7;
+  }
+
+  .rc-dash-col {
+    grid-column: span 5;
+  }
+
+}
+
+/* Sélecteur de jour / de mois : une largeur de contrôle, pas toute la page. */
+@media (min-width: 768px) {
+  .rc-daystep {
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .rc-daystep .rc-daystep__label {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* ---------- Tableaux de données (bons d'entrée, de sortie, de retour, de livraison) ---------- */
+.rc-bons__filtres {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-3);
+  margin: var(--rc-space-2) 0 var(--rc-space-4);
+}
+
+.rc-bons__recherche {
+  flex: 0 1 340px;
+  min-width: 220px;
+}
+
+.rc-bons__statut {
+  width: 320px;
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+
+.rc-tdonnees {
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  overflow-x: auto;
+}
+
+.rc-tdonnees table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.rc-tdonnees thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0 var(--rc-space-3);
+  height: 46px;
+  background: var(--rc-fill);
+  border-bottom: 1px solid var(--rc-line);
+  border-inline-start: 1px solid var(--rc-line);
+  font-size: var(--rc-text-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+  white-space: nowrap;
+}
+
+.rc-tdonnees thead th:first-child {
+  border-inline-start: 0;
+}
+
+.rc-tdonnees tbody td {
+  height: 56px;
+  padding: 0 var(--rc-space-3);
+  border-bottom: 1px solid var(--rc-line);
+  border-inline-start: 1px solid var(--rc-line);
+  font-size: var(--rc-text-callout);
+  white-space: nowrap;
+}
+
+.rc-tdonnees tbody td:first-child {
+  border-inline-start: 0;
+}
+
+.rc-tdonnees tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.rc-tdonnees__principale {
+  font-weight: 800;
+}
+
+.rc-tdonnees tbody td.rc-tdonnees__souple {
+  white-space: normal;
+  min-width: 190px;
+}
+
+.rc-tdonnees__ligne--lien {
+  cursor: pointer;
+}
+
+.rc-tdonnees__ligne--lien:hover,
+.rc-tdonnees__ligne--lien:focus-visible {
+  background: var(--rc-fill);
+  outline: none;
+}
+
+.rc-tdonnees__ligne--attenuee td {
+  color: var(--rc-ink-3);
+}
+
+.rc-tdonnees__ligne--attenuee .rc-tdonnees__principale {
+  text-decoration: line-through;
+}
+
+.rc-tdonnees .rc-tdonnees__chev {
+  width: 40px;
+  padding: 0 var(--rc-space-3) 0 0;
+  border-inline-start: 0;
+  color: var(--rc-ink-3);
+}
+
+.rc-tdonnees__tri {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.rc-tdonnees__tri:hover,
+.rc-tdonnees__tri--actif {
+  color: var(--rc-ink);
+}
+
+.rc-tdonnees__pied {
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-top: 1px solid var(--rc-line);
+  background: var(--rc-fill);
+  font-size: var(--rc-text-callout);
+  color: var(--rc-ink-2);
+}
+
+/* ---------- Boutons d'action de la page : en haut à droite, dans l'en-tête ---------- */
+@media (min-width: 768px) {
+  .rc-appbar__emplacement {
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-2);
+    margin-inline-end: var(--rc-space-2);
+  }
+
+  .rc-appbar__emplacement:empty {
+    display: none;
+  }
+
+  .rc-appbar__emplacement .rc-btn {
+    width: auto;
+    min-width: 0;
+    min-height: 44px;
+    display: inline-flex;
+    align-self: center;
+    white-space: nowrap;
+  }
+
+  .rc-appbar__cta-groupe {
+    display: flex;
+    align-items: center;
+    gap: var(--rc-space-2);
+  }
+
+  .rc-appbar__cta-groupe .rc-actionbar__row {
+    display: flex;
+    gap: var(--rc-space-2);
+    width: auto;
+    margin: 0;
+  }
+
+  .rc-appbar__indice {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--rc-text-meta);
+    font-weight: 600;
+    color: var(--rc-ink-2);
+  }
+
+  /* Plus de bouton flottant ni de flèche « revenir en haut » dans les coins du bas. */
+  .rc-fab-spacer,
+  .rc-haut {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1099px) {
+  .rc-appbar__indice {
+    display: none;
+  }
+}
+
+/* ---------- Inventaire (ordinateur) : comptage dans un tableau ---------- */
+.rc-cnt {
+  width: 150px;
+  height: 40px;
+  padding: 0 var(--rc-space-3);
+  border: 1.5px solid var(--rc-line-strong, var(--rc-line));
+  border-radius: 10px;
+  background: var(--rc-surface);
+  color: var(--rc-ink);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.rc-cnt::-webkit-outer-spin-button,
+.rc-cnt::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.rc-cnt:focus {
+  outline: 3px solid color-mix(in srgb, var(--rc-accent) 45%, transparent);
+  outline-offset: 1px;
+  border-color: var(--rc-accent);
+}
+
+.rc-cnt--lecture {
+  display: inline-grid;
+  place-items: center;
+}
+
+/* Conforme : vert ; manque : rouge ; surplus : orange. */
+.rc-cnt--conforme {
+  background: color-mix(in srgb, var(--rc-positive) 18%, var(--rc-surface));
+  border-color: var(--rc-positive);
+  color: var(--rc-positive);
+}
+
+.rc-cnt--manque {
+  background: color-mix(in srgb, var(--rc-danger) 16%, var(--rc-surface));
+  border-color: var(--rc-danger);
+  color: var(--rc-danger);
+}
+
+.rc-cnt--surplus {
+  background: color-mix(in srgb, #e0791a 20%, var(--rc-surface));
+  border-color: #e0791a;
+  color: #a85a0c;
+}
+
+/* Écart (compté − attendu) : vert si conforme, rouge si manque, orange si surplus. */
+.rc-ecart {
+  display: inline-block;
+  min-width: 64px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.rc-ecart--vide {
+  color: var(--rc-ink-3);
+}
+
+.rc-ecart--conforme {
+  background: color-mix(in srgb, var(--rc-positive) 18%, transparent);
+  color: var(--rc-positive);
+  font-size: 14px;
+}
+
+.rc-ecart--manque {
+  background: color-mix(in srgb, var(--rc-danger) 16%, transparent);
+  color: var(--rc-danger);
+}
+
+.rc-ecart--surplus {
+  background: color-mix(in srgb, #e0791a 20%, transparent);
+  color: #a85a0c;
+}
+
+.rc-cnt__attendue {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--rc-ink-2);
+}
+
+/* Crédits (ordinateur) : recherche courte, filtre et bouton sur une même ligne. */
+.rc-credits-page .rc-appbar__below {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-credits-page .rc-appbar__below > :first-child {
+  flex: 0 1 380px;
+  min-width: 240px;
+}
+
+.rc-credits-page .rc-appbar__below .rc-filtre-ligne,
+.rc-credits-page .rc-appbar__below > div:not(:first-child) {
+  margin-top: 0;
+}
+
+.rc-credits-page .rc-credits-avance {
+  margin-inline-start: auto;
+}
+
+/* Crédits (ordinateur) : une carte par client, en grille. */
 @media (min-width: 900px) {
+  .rc-credits-grille {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--rc-space-4);
+    align-items: start;
+    padding-inline: var(--rc-gutter);
+    padding-block-end: var(--rc-space-6);
+  }
+
+  .rc-credits-grille > .rc-section {
+    padding-inline: 0;
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .rc-credits-grille {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Écrans à tableau large (articles) : la colonne de contenu s'élargit pour tenir toutes les colonnes. */
+.rc-page--large {
+  --rc-web-max: 1360px;
+}
+
+@media (min-width: 768px) {
+  /* Bons de livraison : tant que la fenêtre est étroite, les filtres gardent une largeur raisonnable. */
+  .rc-bl__filtres {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 900px) {
+  /* Bons de livraison : filtres en une ligne, synthèse, puis le tableau en dessous. */
+  .rc-bl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rc-space-4);
+    padding-inline: var(--rc-gutter);
+    padding-block-start: var(--rc-space-3);
+  }
+
+  .rc-bl__filtres {
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--rc-space-4);
+  }
+
+  /* Barre de filtres : une seule ligne, tous les contrôles à la même hauteur (44 px), même style
+     (fond blanc, liseré fin). Période à gauche, recherches et vendeur à droite. */
+  .rc-bl__barre {
+    --bl-h: 44px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--rc-space-3) var(--rc-space-5);
+  }
+
+  .rc-bl__barre .rc-period,
+  .rc-bl__barre .rc-bl__recherches,
+  .rc-bl__barre .rc-daystep,
+  .rc-bl__barre .rc-fields__row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--rc-space-2);
+    padding: 0;
+    width: auto;
+    max-width: none;
+  }
+
+  .rc-bl__barre .rc-period {
+    gap: var(--rc-space-3);
+  }
+
+  .rc-bl__barre .rc-seg {
+    height: var(--bl-h);
+    box-sizing: border-box;
+  }
+
+  .rc-bl__barre .rc-seg__opt {
+    min-height: calc(var(--bl-h) - 6px);
+    padding-inline: var(--rc-space-4);
+  }
+
+  .rc-bl__barre .rc-field {
+    flex: 0 0 auto;
+    width: 168px;
+  }
+
+  .rc-bl__barre .rc-field__box,
+  .rc-bl__barre .rc-search,
+  .rc-bl__barre .rc-chip {
+    height: var(--bl-h);
+    min-height: var(--bl-h);
+    box-sizing: border-box;
+    border-radius: var(--rc-radius-sm);
+    background: var(--rc-surface);
+    box-shadow: inset 0 0 0 1px var(--rc-line);
+  }
+
+  .rc-bl__barre .rc-field__box:focus-within,
+  .rc-bl__barre .rc-search:focus-within {
+    box-shadow: inset 0 0 0 2px var(--rc-ink);
+  }
+
+  .rc-bl__barre .rc-field__input {
+    height: calc(var(--bl-h) - 2px);
+    font-size: var(--rc-text-callout);
+  }
+
+  .rc-bl__barre .rc-search {
+    width: 180px;
+  }
+
+  .rc-bl__barre .rc-search input {
+    font-size: var(--rc-text-callout);
+  }
+
+  .rc-bl__barre .rc-chip {
+    padding-inline: var(--rc-space-4);
+  }
+
+  .rc-bl__barre .rc-daystep .rc-iconbtn,
+  .rc-bl__barre .rc-daystep button {
+    width: var(--bl-h);
+    height: var(--bl-h);
+    flex: 0 0 auto;
+  }
+
+  .rc-bl__barre .rc-daystep .rc-field {
+    width: 210px;
+  }
+
+  .rc-bl__barre .rc-daystep .rc-field__input {
+    text-align: center;
+  }
+
+  .rc-bl__prefixe {
+    padding-inline-start: var(--rc-space-3);
+    font-size: var(--rc-text-meta);
+    font-weight: 700;
+    color: var(--rc-ink-3);
+  }
+
+  .rc-bl__filtres .rc-summary {
+    padding: var(--rc-space-5);
+    border-radius: var(--rc-radius-lg);
+    background: var(--rc-surface);
+    box-shadow: 0 0 0 1px var(--rc-line);
+  }
+
+  .rc-bl__liste .rc-section,
+  .rc-bl__liste .rc-page-notice {
+    padding-inline: 0;
+  }
+
+  .rc-bl__liste > :first-child {
+    margin-top: 0;
+  }
+
   .rc-grille {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -384,11 +1309,21 @@
 }
 
 @media (min-width: 1100px) {
+  /* En-tête de tableau : une barre grise avec une séparation entre colonnes, collée au tableau. */
   .rc-tableau-tete {
+    /* Reste visible en haut de la page quand on fait défiler la liste. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
     display: flex;
-    align-items: center;
-    gap: var(--rc-space-4);
-    padding: 0 var(--rc-gutter) var(--rc-space-2);
+    align-items: stretch;
+    gap: 0;
+    min-height: 46px;
+    margin-top: var(--rc-space-2);
+    padding: 0 var(--rc-gutter);
+    background: var(--rc-fill);
+    border-radius: var(--rc-radius-md) var(--rc-radius-md) 0 0;
+    box-shadow: 0 0 0 1px var(--rc-line);
     font-size: var(--rc-text-label);
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -396,37 +1331,161 @@
     color: var(--rc-ink-2);
   }
 
+  .rc-tableau-tete + .rc-list {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
   .rc-tableau-tete__titre {
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    margin-inline-end: var(--rc-space-3);
   }
 
-  .rc-tableau-tete--vignette .rc-tableau-tete__titre {
+  /* En-tête de colonne cliquable : tri croissant puis décroissant. */
+  .rc-tableau-tri {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+  }
+
+  .rc-tableau-tri:hover,
+  .rc-tableau-tri--actif {
+    color: var(--rc-ink);
+  }
+
+  .rc-tableau__dernier .rc-tableau-tri {
+    flex-direction: row-reverse;
+  }
+
+  /* Le tri passe par les en-têtes : le bouton « Trier » est superflu quand le tableau est affiché. */
+  .rc-tri-bouton {
+    display: none;
+  }
+
+  /* L'en-tête réserve la place de la photo seulement si la liste en affiche. */
+  .rc-tableau-tete--vignette:has(+ .rc-list .rc-row__lead:not(:empty)) .rc-tableau-tete__titre {
     padding-inline-start: calc(48px + var(--rc-space-3));
   }
 
   .rc-tableau-tete--chevron {
-    padding-inline-end: calc(var(--rc-gutter) + 22px);
+    padding-inline-end: calc(var(--rc-gutter) + 26px);
+  }
+
+  /* Colonnes : largeur fixe, filet vertical de séparation (en-tête et lignes). */
+  .rc-tableau__cellule,
+  .rc-tableau__dernier {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-width: 0;
+    padding-inline: var(--rc-space-4);
+    border-inline-start: 1px solid var(--rc-line);
   }
 
   .rc-tableau__cellule {
+    flex: 0 0 var(--rc-col, 136px);
     text-align: start;
-    flex: 0 0 150px;
+  }
+
+  /* En-têtes : texte centré dans sa colonne, sur une seule ligne. */
+  .rc-tableau-tete .rc-tableau__cellule,
+  .rc-tableau-tete .rc-tableau__dernier,
+  .rc-tableau-tete .rc-tableau-tete__titre {
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .rc-tableau-tete .rc-tableau-tri {
+    white-space: nowrap;
+  }
+
+  .rc-tableau-tete .rc-tableau__dernier .rc-tableau-tri {
+    flex-direction: row;
+  }
+
+  /* Marge d'un article : orange quand elle est proche de zéro, rouge quand elle est négative. */
+  .rc-marge {
+    font-weight: 700;
+  }
+
+  .rc-marge--faible {
+    color: var(--rc-warning);
+  }
+
+  .rc-marge--negative {
+    color: var(--rc-danger);
+  }
+
+  .rc-tableau__dernier {
+    flex: 0 0 var(--rc-col, 140px);
+    justify-content: flex-end;
+    text-align: end;
+  }
+
+  .rc-tableau__cellule.rc-web-only--table {
+    display: flex;
+    font-size: var(--rc-text-callout);
+    color: var(--rc-ink-2);
+  }
+
+  /* Première colonne (avant la désignation) : sans filet à gauche, avec un filet à droite. */
+  .rc-tableau__premiere {
+    border-inline-start: 0;
+    border-inline-end: 1px solid var(--rc-line);
+  }
+
+  .rc-tableau-tete--premiere {
+    padding-inline-start: 0;
+  }
+
+  .rc-row--tableau .rc-row__lead {
+    align-self: stretch;
+    margin-inline-start: calc(var(--rc-gutter) * -1);
+  }
+
+  .rc-row--tableau .rc-row__lead > .rc-tableau__cellule {
+    margin-inline-end: var(--rc-gutter);
+  }
+
+  /* Emplacement fixe de la photo : le texte de la désignation reste aligné, avec ou sans photo. */
+  .rc-row--tableau .rc-tableau__photo {
+    display: flex;
+    flex: 0 0 48px;
+    width: 48px;
+    align-items: center;
+    margin-inline-end: var(--rc-space-3);
+  }
+
+  .rc-tableau-tete--premiere .rc-tableau-tete__titre {
+    padding-inline-start: calc(var(--rc-gutter) + 48px + var(--rc-space-3));
+  }
+
+  .rc-row--tableau {
+    --rc-row-inset: 0px;
+  }
+
+  .rc-tableau__texte {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .rc-tableau__dernier {
-    flex: 0 0 130px;
-    text-align: end;
-  }
-
-  .rc-tableau__cellule.rc-web-only--table {
-    display: block;
-    font-size: var(--rc-text-callout);
-    color: var(--rc-ink-2);
+  .rc-row--tableau {
+    padding-block: 0;
   }
 
   .rc-row--tableau .rc-row__meta {
@@ -435,9 +1494,11 @@
 
   .rc-row--tableau .rc-row__trail {
     flex-direction: row;
-    align-items: center;
-    gap: var(--rc-space-4);
+    align-items: stretch;
+    align-self: stretch;
+    gap: 0;
     max-width: none;
+    margin-inline-start: var(--rc-space-3);
   }
 }
 
@@ -491,8 +1552,17 @@
   .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__nom,
   .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__libelle,
   .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__chevron,
-  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__sous {
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__tiroir {
     display: none;
+  }
+
+  /* Replié : le titre de rubrique devient un simple filet de séparation. */
+  .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__groupe-titre {
+    height: 1px;
+    margin: var(--rc-space-2) var(--rc-space-2) var(--rc-space-2);
+    padding: 0;
+    font-size: 0;
+    background: var(--rc-line);
   }
 
   .rc-sidenav:not(:hover):not(:has(:focus-visible)) .rc-sidenav__entree {
@@ -509,4 +1579,3007 @@
   .rc-fab {
     transition: none;
   }
+}
+
+/* ---------- Ventes › Transformation BL en Facture ---------- */
+.rc-transfo {
+  padding-inline: var(--rc-gutter);
+  padding-block: var(--rc-space-3) var(--rc-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+}
+
+.rc-transfo__tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--rc-space-5);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .rc-transfo__tables {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.rc-transfo__bloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  min-width: 0;
+}
+
+/* Deux tableaux côte à côte : chacun défile dans sa zone, les boutons restent visibles. */
+.rc-transfo__zone {
+  /* Tableaux + boutons jusqu'en bas de l'écran (en-tête, titre, filtre et boutons déduits : 250px). */
+  height: max(300px, calc(100vh - 250px));
+  height: max(300px, calc(100dvh - 250px));
+  display: flex;
+  flex-direction: column;
+}
+
+.rc-transfo__zone > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.rc-transfo__zone > .rc-tdonnees {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.rc-transfo__zone > .rc-tdonnees > table {
+  flex: none;
+}
+
+/* Le total reste calé en bas du cadre, même avec peu de lignes. */
+.rc-transfo__zone .rc-tdonnees__pied {
+  margin-top: auto;
+  font-size: var(--rc-text-body);
+}
+
+/* Les deux blocs partagent les mêmes lignes : titres, tableaux et boutons sont alignés d'un côté à l'autre. */
+@media (min-width: 900px) {
+  .rc-transfo__tables {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    row-gap: var(--rc-space-3);
+  }
+
+  .rc-transfo__bloc {
+    display: contents;
+  }
+
+  .rc-transfo__bloc--g > * {
+    grid-column: 1;
+  }
+
+  .rc-transfo__bloc--d > * {
+    grid-column: 2;
+  }
+
+  .rc-transfo__bloc--g > .rc-transfo__titre {
+    grid-row: 1;
+  }
+
+  /* À droite, pas de filtre : le titre descend pour toucher son tableau. */
+  .rc-transfo__bloc--d > .rc-transfo__titre {
+    grid-row: 2;
+    align-self: end;
+  }
+
+  .rc-transfo__bloc--g > .rc-transfo__filtres {
+    grid-row: 2;
+  }
+
+  .rc-transfo__bloc > .rc-transfo__zone {
+    grid-row: 3;
+  }
+
+  .rc-transfo__bloc > .rc-transfo__actions {
+    grid-row: 4;
+  }
+}
+
+/* Pied de tableau : le nombre de bons à gauche, le total tout à droite. */
+.rc-transfo__pied {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--rc-space-4);
+}
+
+.rc-transfo__entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rc-space-4);
+}
+
+.rc-transfo__entete > * {
+  flex: 0 1 220px;
+}
+
+.rc-transfo__enregistrer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rc-tdonnees .rc-transfo__groupe th {
+  padding: var(--rc-space-2) var(--rc-space-4);
+  text-align: start;
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--rc-ink-2);
+  background: transparent;
+  border-block: 1px solid var(--rc-line);
+  position: static;
+}
+
+.rc-transfo__titre {
+  margin: 0;
+  font-size: var(--rc-text-title, 1.125rem);
+  font-weight: 700;
+  color: var(--rc-ink);
+}
+
+.rc-transfo__filtres {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-transfo__filtres > * {
+  flex: 0 1 auto;
+}
+
+.rc-transfo__filtres .rc-search {
+  flex: 0 0 auto;
+  width: 240px;
+  max-width: 100%;
+}
+
+.rc-transfo__dates {
+  display: flex;
+  gap: var(--rc-space-3);
+  flex-wrap: wrap;
+}
+
+.rc-transfo__dates > * {
+  flex: 1 1 160px;
+  max-width: 220px;
+}
+
+.rc-transfo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+
+/* Bouton flottant : ne prend aucune place dans la page. */
+.rc-transfo__bas {
+  position: fixed;
+  inset-block-end: var(--rc-space-5);
+  inset-inline-end: var(--rc-space-6);
+  z-index: 5;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.25));
+}
+
+.rc-transfo__popup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+  padding: var(--rc-space-4) var(--rc-gutter);
+}
+
+.rc-transfo__bons {
+  margin: 0;
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* Total HT, TVA, Total TTC l'un sous l'autre, montants alignés à droite. */
+.rc-transfo__totaux {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--rc-space-1);
+  width: min(100%, 300px);
+  margin-inline-start: auto;
+  color: var(--rc-ink-2);
+}
+
+.rc-transfo__totaux > * {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--rc-space-4);
+}
+
+.rc-transfo__totaux strong {
+  color: var(--rc-ink);
+}
+
+.rc-tdonnees .rc-tdonnees__ligne--selection,
+.rc-tdonnees .rc-tdonnees__ligne--selection:hover {
+  background: var(--rc-accent-soft, var(--rc-fill));
+  box-shadow: inset 3px 0 0 var(--rc-accent);
+}
+
+.rc-tdonnees__ligne--lien {
+  user-select: none;
+}
+
+/* Le total reste visible au bas de la zone, même quand la liste défile. */
+.rc-transfo__zone .rc-tdonnees__pied {
+  position: sticky;
+  bottom: 0;
+}
+
+/* ---------- Ventes › Factures ---------- */
+.rc-factures__barre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--rc-space-3);
+}
+
+.rc-factures__selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-accent-soft, var(--rc-fill));
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-factures__boutons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-factures__pied-popup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-transfo__case {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--rc-accent);
+  cursor: pointer;
+}
+
+/* ---------- Barre de défilement personnalisée des tableaux ---------- */
+/* Firefox seulement : dans Chrome, scrollbar-color / scrollbar-width désactivent les ::-webkit-scrollbar ci-dessous. */
+@supports not selector(::-webkit-scrollbar) {
+  .rc-tdonnees {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rc-ink-3) transparent;
+  }
+}
+
+.rc-tdonnees::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+.rc-tdonnees::-webkit-scrollbar-track,
+.rc-tdonnees::-webkit-scrollbar-track-piece,
+.rc-tdonnees::-webkit-scrollbar-button {
+  background: transparent;
+  box-shadow: none;
+}
+
+.rc-tdonnees::-webkit-scrollbar-thumb {
+  background: var(--rc-line);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  transition: background-color 0.15s;
+}
+
+.rc-tdonnees::-webkit-scrollbar-thumb:hover {
+  background: var(--rc-ink-3);
+  background-clip: padding-box;
+}
+
+.rc-tdonnees::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------- Bons de livraison : indicateurs et graphiques au-dessus du tableau ---------- */
+.rc-bl-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+}
+
+.rc-bl-stats__kpis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--rc-space-4);
+}
+
+.rc-bl-stats__kpis > .rc-dash-card {
+  grid-column: auto;
+  min-width: 0;
+}
+
+/* Répartition : l'anneau à gauche, la légende en une colonne à droite. */
+.rc-bl-stats__repartition .rc-dash-anneau {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--rc-space-5);
+}
+
+.rc-bl-stats__repartition .rc-dash-anneau__legende {
+  flex: 1 1 200px;
+  width: auto;
+}
+
+.rc-bl-stats__graphiques {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--rc-space-4);
+}
+
+/* .rc-dash-card prend toute la ligne par défaut (grille du tableau de bord) : ici une colonne chacune. */
+.rc-bl-stats__graphiques > .rc-dash-card {
+  grid-column: auto;
+  min-width: 0;
+}
+
+.rc-bl-stats__kpis {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Web : deux rangées de trois cartes côte à côte, toujours sur la même ligne. */
+@media (min-width: 900px) {
+  .rc-bl-stats__kpis {
+    grid-template-columns: minmax(250px, max-content) minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+
+  /* Ventes par jour plus large que les classements : les 28 colonnes respirent. */
+  .rc-bl-stats__graphiques {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Le graphique occupe toute la hauteur de sa carte (alignée sur celle des classements), sans vide en dessous. */
+.rc-bl-stats__jours {
+  display: flex;
+  flex-direction: column;
+}
+
+.rc-bl-stats__jours .rc-cols {
+  flex: 1 1 auto;
+}
+
+.rc-bl-stats__jours .rc-cols__plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 130px;
+  gap: 4px;
+}
+
+/* ---------- Transformation intelligente ---------- */
+.rc-smart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-5);
+  padding: var(--rc-space-5) var(--rc-space-6) var(--rc-space-6);
+}
+
+/* Sélecteur de mois centré dans la fenêtre. */
+.rc-smart .rc-daystep {
+  margin-inline: auto;
+}
+
+.rc-smart__bascule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  width: 100%;
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border: 0;
+  border-radius: var(--rc-radius-sm);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+  color: var(--rc-ink);
+  cursor: pointer;
+}
+
+.rc-smart__chevron {
+  font-size: 18px;
+  transition: transform 0.15s ease;
+}
+
+.rc-smart__chevron--ouvert {
+  transform: rotate(180deg);
+}
+
+.rc-smart__puces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rc-smart__puce {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  background: var(--rc-fill);
+  font-size: var(--rc-text-meta);
+  font-weight: 600;
+}
+
+.rc-smart__puce button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--rc-ink-2);
+  cursor: pointer;
+}
+
+.rc-smart__puce button:hover {
+  background: var(--rc-press);
+  color: var(--rc-ink);
+}
+
+.rc-smart__panneau {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-smart__bloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-smart__titre {
+  margin: 0;
+  font-size: var(--rc-text-callout);
+  font-weight: 700;
+  color: var(--rc-ink);
+}
+
+.rc-smart__titre small {
+  margin-inline-start: var(--rc-space-2);
+  font-weight: 600;
+  color: var(--rc-ink-3);
+}
+
+.rc-smart__ligne {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-smart__tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-smart__actions {
+  display: flex;
+  gap: var(--rc-space-2);
+}
+
+.rc-smart__clients {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-smart__client {
+  display: grid;
+  grid-template-columns: 18px 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-2) var(--rc-space-4);
+  border-bottom: 1px solid var(--rc-line);
+  cursor: pointer;
+}
+
+.rc-smart__clients li:last-child .rc-smart__client {
+  border-bottom: 0;
+}
+
+.rc-smart__client:hover {
+  background: var(--rc-fill);
+}
+
+.rc-smart__ref {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--rc-ink-2);
+}
+
+.rc-smart__nom {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-smart__meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--rc-space-1);
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-smart__resume {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-smart__resume > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-1);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-smart__resume strong {
+  font-size: var(--rc-text-title, 1.125rem);
+}
+
+.rc-smart__resume small,
+.rc-smart__etiquette {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-smart__etiquette {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.rc-smart__table .rc-tdonnees {
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.rc-smart__pied {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rc-space-3);
+}
+
+/* Liste des factures : le tableau défile dans son cadre, le pied (nombre et total) reste fixe en bas. */
+.rc-transfo__zone--factures {
+  height: max(320px, calc(100vh - 275px));
+  height: max(320px, calc(100dvh - 275px));
+}
+
+.rc-bl__numero {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  flex-wrap: wrap;
+}
+
+/* ---------- Achats et fournisseurs ---------- */
+.rc-achat__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+  padding: var(--rc-space-5) var(--rc-space-6) var(--rc-space-6);
+}
+
+.rc-achat__ligne2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__ligne3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--rc-space-3);
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .rc-achat__ligne2,
+  .rc-achat__ligne3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rc-achat__fournisseur {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--rc-space-1);
+}
+
+.rc-achat__fournisseur > .rc-field {
+  width: 100%;
+}
+
+.rc-achat__lignes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+}
+
+.rc-achat__tete-lignes,
+.rc-achat__ligne {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 110px 70px 150px 110px 40px;
+  gap: var(--rc-space-2);
+  align-items: center;
+}
+
+.rc-achat__tete-lignes {
+  padding-inline: var(--rc-space-1);
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__tete-lignes > :nth-child(6),
+.rc-achat__ligne > .rc-money {
+  text-align: end;
+  justify-self: end;
+}
+
+.rc-achat__designation {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-achat__ajouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+
+.rc-achat__pied {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__pied--totaux {
+  justify-content: space-between;
+}
+
+.rc-achat__pied--actions {
+  justify-content: space-between;
+}
+
+.rc-achat__totaux {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--rc-space-5);
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__totaux strong {
+  color: var(--rc-ink);
+}
+
+.rc-achat__resume,
+.rc-achat__entete > div,
+.rc-achat__kpis > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-1);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-achat__resume {
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__resume strong {
+  color: var(--rc-ink);
+}
+
+.rc-achat__entete,
+.rc-achat__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__kpis small {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__etiquette {
+  font-size: var(--rc-text-meta);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__barre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__filtres {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-achat__filtres .rc-field {
+  width: 180px;
+}
+
+.rc-achat__filtres .rc-search {
+  width: 220px;
+}
+
+.rc-achat__reglements ul {
+  margin: var(--rc-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-achat__reglements li {
+  display: grid;
+  grid-template-columns: 110px 110px minmax(0, 1fr) auto 36px;
+  align-items: center;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-2) var(--rc-space-4);
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-achat__reglements li:last-child {
+  border-bottom: 0;
+}
+
+.rc-achat__ref {
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__solde {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-achat__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__titre-section {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-achat__total-section {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--rc-space-2);
+}
+
+.rc-achat__total-section small {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__table .rc-tdonnees {
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.rc-achat__table .rc-tdonnees__pied {
+  position: sticky;
+  bottom: 0;
+}
+
+/* ---------- Dépenses ---------- */
+.rc-depense__haut {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--rc-space-4);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .rc-depense__haut {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+
+.rc-depense__total {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rc-depense__repartition {
+  grid-column: auto;
+}
+
+.rc-depense__repartition .rc-rank {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--rc-space-3) var(--rc-space-5);
+}
+
+.rc-depense__photo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rc-space-2);
+}
+
+.rc-depense__photo img {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  object-fit: cover;
+}
+
+.rc-depense__ajout {
+  display: flex;
+  gap: var(--rc-space-2);
+  align-items: center;
+}
+
+.rc-depense__ajout .rc-field {
+  flex: 1;
+}
+
+.rc-depense__categories {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-depense__categories li {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  padding: var(--rc-space-2) var(--rc-space-3) var(--rc-space-2) var(--rc-space-4);
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-depense__categories li:last-child {
+  border-bottom: 0;
+}
+
+.rc-depense__categories li > span,
+.rc-depense__categories li > .rc-field {
+  flex: 1;
+}
+
+/* ---------- Import d'une collecte du PDA ---------- */
+.rc-collecte__liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-collecte__liste li {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  padding-inline-end: var(--rc-space-3);
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-collecte__liste li:last-child {
+  border-bottom: 0;
+}
+
+.rc-collecte__choix {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border: 0;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rc-collecte__choix:hover {
+  background: var(--rc-fill);
+}
+
+.rc-collecte__choix span {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+/* Ligne d'achat : la ligne de saisie, puis (si le prix d'achat change) le bloc de variation et le choix du prix de vente. */
+.rc-achat__bloc-ligne {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-1);
+  padding-bottom: var(--rc-space-2);
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-achat__variation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2) var(--rc-space-5);
+  margin-inline-start: var(--rc-space-2);
+  padding: var(--rc-space-2) var(--rc-space-3);
+  border-radius: var(--rc-radius-sm);
+  font-size: var(--rc-text-callout);
+}
+
+.rc-achat__variation--hausse {
+  background: var(--rc-danger-soft, #fbe7e5);
+}
+
+.rc-achat__variation--baisse {
+  background: var(--rc-positive-soft, #e3f4ea);
+}
+
+.rc-achat__variation-prix {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-1);
+}
+
+.rc-achat__variation-prix s {
+  color: var(--rc-ink-3);
+}
+
+.rc-achat__variation--hausse .rc-achat__variation-prix em {
+  color: var(--rc-danger);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.rc-achat__variation--baisse .rc-achat__variation-prix em {
+  color: var(--rc-positive);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.rc-achat__choix-vente {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-1) var(--rc-space-4);
+  flex-basis: 100%;
+}
+
+.rc-achat__choix-vente label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-1);
+  cursor: pointer;
+}
+
+.rc-achat__choix-vente small {
+  color: var(--rc-ink-2);
+}
+
+.rc-achat__vente-saisie {
+  width: 90px;
+  height: 32px;
+  padding: 0 var(--rc-space-2);
+  border: 1px solid var(--rc-line);
+  border-radius: var(--rc-radius-sm);
+  background: var(--rc-surface);
+  font: inherit;
+}
+
+.rc-achat__fournisseur-note {
+  display: flex;
+  flex-direction: column;
+}
+
+.rc-achat__fournisseur-note small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Éditions : journaux ---------- */
+.rc-journal__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+
+.rc-journal__type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  height: 40px;
+  padding: 0 var(--rc-space-4);
+  border-radius: 999px;
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rc-journal__type--actif {
+  background: var(--rc-accent-soft, #e6efff);
+  box-shadow: inset 0 0 0 1.5px var(--rc-accent);
+  color: var(--rc-ink);
+}
+
+.rc-journal__type input {
+  accent-color: var(--rc-accent);
+}
+
+.rc-journal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-journal .rc-journal__jour th {
+  padding: var(--rc-space-2) var(--rc-space-4);
+  background: var(--rc-fill);
+  text-align: start;
+  font-weight: 700;
+}
+
+.rc-journal .rc-journal__jour small {
+  margin-inline-start: var(--rc-space-3);
+  font-weight: 500;
+  color: var(--rc-ink-2);
+}
+
+.rc-journal .rc-journal__sous-total td {
+  font-weight: 700;
+  border-top: 1px solid var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-journal .rc-journal__total td {
+  font-weight: 800;
+  background: var(--rc-accent-soft, #e6efff);
+}
+
+.rc-journal__numero {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  flex-wrap: wrap;
+}
+
+.rc-journal__recap {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--rc-space-4);
+}
+
+.rc-journal__recap .rc-dash-card {
+  grid-column: auto;
+}
+
+.rc-journal__tva {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rc-journal__tva th,
+.rc-journal__tva td {
+  padding: var(--rc-space-2) var(--rc-space-3);
+  border-bottom: 1px solid var(--rc-line);
+  text-align: end;
+}
+
+.rc-journal__tva th:first-child,
+.rc-journal__tva td:first-child {
+  text-align: start;
+}
+
+.rc-journal .rc-journal__oeil {
+  width: 48px;
+  text-align: center;
+  padding-inline: 0;
+}
+
+/* ---------- Tableau de bord : activité du jour ---------- */
+.rc-activite__entete {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-activite__titre {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--rc-space-3);
+  font-size: var(--rc-text-headline, 1.05rem);
+  font-weight: 700;
+}
+
+.rc-activite__titre small {
+  font-size: var(--rc-text-meta);
+  font-weight: 500;
+  color: var(--rc-ink-2);
+}
+
+.rc-activite__entete .rc-daystep .rc-field {
+  width: 170px;
+  flex: none;
+}
+
+.rc-activite__bloc {
+  grid-column: span 12;
+}
+
+@media (min-width: 900px) {
+  .rc-activite__bloc {
+    grid-column: span 6;
+  }
+}
+
+@media (min-width: 1300px) {
+  .rc-activite__bloc {
+    grid-column: span 4;
+  }
+}
+
+.rc-activite__bloc--alerte {
+  box-shadow: 0 0 0 1.5px var(--rc-warning), 0 1px 2px rgba(26, 24, 22, 0.04);
+}
+
+.rc-activite__bloc .rc-dash-card__titre {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-activite__nb {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--rc-fill);
+  font-size: var(--rc-text-meta);
+  text-align: center;
+}
+
+.rc-activite__liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.rc-activite__liste li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-2) 0;
+  border-bottom: 1px solid var(--rc-line);
+}
+
+.rc-activite__liste li:last-child {
+  border-bottom: 0;
+}
+
+.rc-activite__liste li > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rc-activite__liste li > span:first-child strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-activite__liste small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+}
+
+.rc-activite__droite {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  flex: none;
+}
+
+.rc-activite__cliquable {
+  cursor: pointer;
+}
+
+.rc-activite__cliquable:hover {
+  background: var(--rc-fill);
+}
+
+.rc-activite__prix--hausse small strong {
+  color: var(--rc-danger);
+}
+
+.rc-activite__prix--baisse small strong {
+  color: var(--rc-positive);
+}
+
+/* ---------- Tableau de bord : onglets, titres de section, « À traiter » ---------- */
+.rc-dash-onglets {
+  grid-column: 1 / -1;
+}
+
+.rc-dash-section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--rc-space-3);
+  margin: var(--rc-space-4) 0 calc(var(--rc-space-1) * -1);
+  padding-bottom: var(--rc-space-2);
+  border-bottom: 1px solid var(--rc-line);
+  font-size: var(--rc-text-headline, 1.05rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--rc-ink);
+}
+
+.rc-dash-section small {
+  font-size: var(--rc-text-meta);
+  font-weight: 600;
+  color: var(--rc-ink-2);
+}
+
+.rc-alertes {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-alerte {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  text-align: start;
+  cursor: pointer;
+  border-inline-start: 4px solid transparent;
+}
+
+.rc-alerte:hover {
+  box-shadow: 0 0 0 1px var(--rc-line), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.rc-alerte > ion-icon {
+  flex: none;
+  font-size: 26px;
+}
+
+.rc-alerte span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rc-alerte strong {
+  font-size: var(--rc-text-title, 1.125rem);
+  font-weight: 800;
+}
+
+.rc-alerte small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+}
+
+.rc-alerte--danger {
+  border-inline-start-color: var(--rc-danger);
+}
+
+.rc-alerte--danger > ion-icon {
+  color: var(--rc-danger);
+}
+
+.rc-alerte--warning {
+  border-inline-start-color: var(--rc-warning);
+}
+
+.rc-alerte--warning > ion-icon {
+  color: var(--rc-warning);
+}
+
+.rc-alerte--info {
+  border-inline-start-color: var(--rc-accent);
+}
+
+.rc-alerte--info > ion-icon {
+  color: var(--rc-accent);
+}
+
+.rc-alerte--ok {
+  cursor: default;
+  border-inline-start-color: var(--rc-positive);
+}
+
+.rc-alerte--ok > ion-icon {
+  color: var(--rc-positive);
+}
+
+/* Barre de période du tableau de bord (PC) : Du / Au et raccourcis. */
+.rc-dash-periode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-dash-periode .rc-field {
+  width: 180px;
+}
+
+/* ---------- Inventaires : tournant par catégorie ---------- */
+.rc-inv__barre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-gutter) 0;
+}
+
+.rc-inv__mois-titre {
+  margin: var(--rc-space-4) var(--rc-gutter) var(--rc-space-2);
+  font-size: var(--rc-text-meta);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-inv__suivi {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-inv__categories {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 46vh;
+  overflow: auto;
+  border-radius: var(--rc-radius-md);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  background: var(--rc-surface);
+}
+
+.rc-inv__categories li {
+  border-bottom: 1px solid var(--rc-line);
+  padding-block: var(--rc-space-2);
+  padding-inline-end: var(--rc-space-3);
+}
+
+.rc-inv__categories li:last-child {
+  border-bottom: 0;
+}
+
+.rc-inv__categorie {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+  cursor: pointer;
+}
+
+.rc-inv__categorie-nom {
+  flex: 1;
+  font-weight: 600;
+}
+
+.rc-inv__categorie small {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+}
+
+.rc-inv__categorie--heritee .rc-inv__categorie-nom {
+  color: var(--rc-ink-2);
+}
+
+/* ---------- Menu latéral : barre de défilement transparente ---------- */
+/* Piste invisible ; le curseur n'apparaît, discret, qu'au survol du menu. */
+@supports not selector(::-webkit-scrollbar) {
+  .rc-sidenav {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .rc-sidenav:hover {
+    scrollbar-color: color-mix(in srgb, var(--rc-ink-3) 45%, transparent) transparent;
+  }
+}
+
+.rc-sidenav::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.rc-sidenav::-webkit-scrollbar-track,
+.rc-sidenav::-webkit-scrollbar-button,
+.rc-sidenav::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+.rc-sidenav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.rc-sidenav:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--rc-ink-3) 45%, transparent);
+}
+
+/* ---------- Impression traite / chèque ---------- */
+/* Le papier à l'échelle : le papier vierge en fond (pâle, pour que le texte ressorte), chaque texte dans sa case. */
+.rc-effet {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--rc-line-strong), 0 6px 20px rgb(0 0 0 / 0.12);
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  user-select: none;
+  touch-action: none;
+}
+
+.rc-effet__fond {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.rc-effet__grille {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(0 0 0 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 0 0 / 0.06) 1px, transparent 1px);
+}
+
+.rc-effet__case {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #0b2a6b;
+}
+
+.rc-effet__case span {
+  display: block;
+  white-space: nowrap;
+}
+
+/* Aperçu à remplir : chaque case remplie se voit, comme sur le papier. */
+.rc-effet:not(.rc-effet--edition) .rc-effet__case {
+  border-radius: 3px;
+  background: rgb(219 232 255 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 0.45);
+}
+
+.rc-effet--edition .rc-effet__case {
+  cursor: grab;
+  overflow: visible;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 0.5);
+}
+
+.rc-effet--edition .rc-effet__case:active {
+  cursor: grabbing;
+}
+
+.rc-effet__case--vide {
+  color: rgb(37 99 235 / 0.75);
+  font-style: italic;
+}
+
+.rc-effet__case--choisie {
+  z-index: 1;
+  background: rgb(255 240 200 / 0.85) !important;
+  box-shadow: inset 0 0 0 2px var(--rc-accent) !important;
+}
+
+/* Coin d'agrandissement de la case choisie. */
+.rc-effet__poignee {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #fff;
+  border-radius: 3px;
+  background: var(--rc-accent);
+  cursor: nwse-resize;
+}
+
+.rc-effet__lettres {
+  margin: calc(-1 * var(--rc-space-2)) 0 0;
+  font-size: var(--rc-text-meta);
+  font-style: italic;
+  color: var(--rc-ink-2);
+}
+
+.rc-effets__intro {
+  margin: 0 var(--rc-gutter) var(--rc-space-3);
+}
+
+.rc-effets__choix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--rc-space-3);
+  padding: 0 var(--rc-gutter);
+}
+
+.rc-effets__tuile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--rc-space-1);
+  padding: var(--rc-space-4);
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  color: var(--rc-ink);
+  text-align: start;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.rc-effets__tuile:hover {
+  box-shadow: 0 0 0 2px var(--rc-accent);
+  transform: translateY(-1px);
+}
+
+.rc-effets__tuile span:last-child {
+  color: var(--rc-ink-2);
+  font-size: var(--rc-text-meta);
+}
+
+.rc-effets__icone {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--rc-space-2);
+  border-radius: 12px;
+  background: var(--rc-accent-soft);
+  color: var(--rc-accent);
+  font-size: 24px;
+}
+
+.rc-effets__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-effets__ajout {
+  padding: var(--rc-space-3) var(--rc-gutter);
+}
+
+.rc-effets__reglage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-gutter) var(--rc-space-6);
+}
+
+.rc-effets__barre,
+.rc-effets__outils,
+.rc-effets__pied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--rc-space-3);
+}
+
+.rc-effets__barre > :first-child {
+  flex: 1 1 280px;
+}
+
+.rc-effets__pied {
+  justify-content: flex-end;
+}
+
+
+.rc-effets__plan {
+  border-radius: 6px;
+  outline: none;
+}
+
+.rc-effets__plan:focus-visible {
+  box-shadow: 0 0 0 3px var(--rc-accent-soft);
+}
+
+.rc-effets__champs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+
+.rc-effets__puce {
+  min-height: 32px;
+  padding: 0 var(--rc-space-3);
+  border: 0;
+  border-radius: 999px;
+  background: var(--rc-fill);
+  color: var(--rc-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rc-effets__puce--active {
+  background: var(--rc-accent);
+  color: #fff;
+}
+
+.rc-effets__puce--masque {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+
+/* Réglage du papier : groupes alignés, unités dans les champs, choix sur une ligne. */
+.rc-effets__papier {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-effets__groupe {
+  min-width: 0;
+  margin: 0;
+  padding: var(--rc-space-3);
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-effets__groupe > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--rc-space-2);
+  padding: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-effets__grille {
+  clear: both;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--rc-space-3);
+  align-items: end;
+}
+
+.rc-effets__grille--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .rc-effets__grille--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.rc-effets__choix-ligne,
+.rc-effets__alignement {
+  clear: both;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-effets__choix-ligne + .rc-effets__choix-ligne {
+  margin-top: var(--rc-space-2);
+}
+
+.rc-effets__choix-ligne > span,
+.rc-effets__alignement > span {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rc-ink);
+}
+
+/* L'alignement occupe les deux dernières colonnes, son libellé au-dessus comme les champs. */
+.rc-effets__alignement {
+  grid-column: span 2;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--rc-space-1);
+}
+
+.rc-effets__groupe .rc-seg,
+.rc-effets__inspecteur-tete .rc-seg {
+  flex: 0 0 auto;
+}
+
+.rc-effets__groupe .rc-seg *,
+.rc-effets__inspecteur-tete .rc-seg * {
+  white-space: nowrap;
+}
+
+.rc-effets__groupe .rc-footnote {
+  margin: var(--rc-space-2) 0 0;
+}
+
+.rc-effets__inspecteur {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-fill);
+}
+
+.rc-effets__inspecteur-tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+}
+
+.rc-effets__inspecteur-tete > strong {
+  font-size: 16px;
+}
+
+/* Documents impayés d'un fournisseur : colonnes serrées, tout tient dans la fenêtre (pas de défilement horizontal). */
+.rc-impayes .rc-tdonnees th,
+.rc-impayes .rc-tdonnees td {
+  padding-inline: 10px;
+}
+
+.rc-impayes .rc-tdonnees td {
+  white-space: nowrap;
+}
+
+.rc-impayes .rc-btn {
+  min-height: 36px;
+  padding-inline: 12px;
+}
+
+/* Avance non imputée d'un fournisseur : bandeau avec son action. */
+.rc-avance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc-accent) 30%, transparent);
+}
+
+.rc-avance > span {
+  flex: 1 1 260px;
+  color: var(--rc-ink);
+}
+
+/* Imputer l'avance : un document par ligne, son montant à droite. */
+.rc-imputer {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-imputer__ligne {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: center;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-2) var(--rc-space-3);
+}
+
+.rc-imputer__ligne + .rc-imputer__ligne {
+  border-top: 1px solid var(--rc-line);
+}
+
+.rc-imputer__ligne > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rc-imputer__ligne > div:first-child span {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-inv__tout-depot {
+  margin: var(--rc-space-2) var(--rc-gutter) var(--rc-space-3);
+}
+
+/* Tableau de bord › État du dépôt (plan 3D) */
+.rc-dash-depot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-dash-depot__barre {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--rc-fill);
+}
+
+.rc-dash-depot__barre > span {
+  min-width: 6px;
+  border-radius: 999px;
+}
+
+.rc-dash-depot__comptes,
+.rc-dash-depot__points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rc-dash-depot__comptes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--rc-space-2);
+}
+
+.rc-dash-depot__comptes li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--rc-ink-2);
+}
+
+.rc-dash-depot__comptes strong {
+  font-size: 20px;
+  color: var(--rc-ink);
+}
+
+.rc-dash-depot__pastille {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.rc-dash-depot__points li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--rc-space-2);
+  padding: 6px 0;
+  border-top: 1px solid var(--rc-line);
+}
+
+.rc-dash-depot__article {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-dash-depot__lieu {
+  grid-column: 2;
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+/* Fiche article : chaque onglet remplit la largeur, sans colonne vide. */
+@media (min-width: 768px) {
+  /* Fiche : la photo à gauche, l'identification à droite. */
+  .rc-grille--fiche {
+    grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  }
+
+  .rc-grille--fiche > .rc-media {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--rc-space-3);
+    margin-top: var(--rc-space-5);
+    padding: var(--rc-space-4);
+    border-radius: var(--rc-radius-lg);
+    background: var(--rc-surface);
+    box-shadow: 0 0 0 1px var(--rc-line);
+  }
+
+  .rc-grille--fiche > .rc-media > :first-child {
+    align-self: center;
+  }
+
+  /* Tarifs, codes-barres : un seul bloc, en pleine largeur. */
+  .rc-grille--tarifs,
+  .rc-grille--codes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Tarifs : les paires de champs sur toute la largeur, quatre par ligne sur grand écran. */
+  .rc-grille--tarifs .rc-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--rc-space-3) var(--rc-space-5);
+  }
+
+  .rc-grille--tarifs .rc-fields > .rc-fields__row {
+    margin: 0;
+  }
+}
+
+/* Codes-barres : la liste à gauche, l'ajout à droite. */
+@media (min-width: 768px) {
+  .rc-codes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--rc-space-4);
+    align-items: start;
+  }
+
+  .rc-codes > .rc-group {
+    margin: 0;
+  }
+}
+
+.rc-codes__vide {
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  /* Dans la grille de la fiche (qui a déjà ses marges) : pas de retrait en plus. */
+  .rc-grille .rc-stock-chiffres {
+    margin-inline: 0;
+    margin-top: var(--rc-space-5);
+  }
+
+  .rc-grille--stock {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Transformation intelligente : calcul du total visé (achats du mois + marge). */
+.rc-smart__calcul {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-3);
+  margin-bottom: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-accent-soft);
+}
+
+.rc-smart__calcul > ion-icon {
+  flex: 0 0 auto;
+  font-size: 24px;
+  color: var(--rc-accent);
+}
+
+.rc-smart__calcul-corps {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  min-width: 0;
+}
+
+.rc-smart__calcul-formule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-2);
+  font-weight: 700;
+}
+
+.rc-smart__calcul-formule .rc-field {
+  width: 110px;
+  margin: 0;
+}
+
+/* ---------- Promotions ---------- */
+.rc-promo-choix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-promo-choix__tuile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--rc-space-1);
+  padding: var(--rc-space-4);
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+  text-align: start;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.rc-promo-choix__tuile:hover {
+  box-shadow: 0 0 0 2px var(--rc-accent);
+  transform: translateY(-1px);
+}
+
+.rc-promo-choix__tuile > span:last-child {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-promo-choix__icone {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: var(--rc-space-2);
+  border-radius: 12px;
+  background: var(--rc-accent-soft);
+  color: var(--rc-accent);
+  font-size: 22px;
+}
+
+.rc-promo-choix__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--rc-space-3);
+}
+
+.rc-promo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-gutter) var(--rc-space-6);
+}
+
+.rc-promo__entete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-promo__champs {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--rc-space-3);
+}
+
+@media (max-width: 760px) {
+  .rc-promo__champs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rc-promo__modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--rc-space-2);
+}
+
+.rc-promo__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--rc-space-3);
+  border: 0;
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-fill);
+  color: var(--rc-ink);
+  text-align: start;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1.5px transparent;
+}
+
+.rc-promo__mode span {
+  font-size: 12px;
+  color: var(--rc-ink-2);
+}
+
+.rc-promo__mode--actif {
+  background: var(--rc-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--rc-accent);
+}
+
+.rc-promo__ajout {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+}
+
+.rc-promo__ajout .rc-field {
+  width: 220px;
+  margin: 0;
+}
+
+.rc-promo__table td,
+.rc-promo__table th {
+  white-space: nowrap;
+}
+
+.rc-promo__table td.rc-tdonnees__souple {
+  white-space: normal;
+}
+
+.rc-promo__num {
+  text-align: end;
+}
+
+.rc-promo__code,
+.rc-promo__unite {
+  display: block;
+  font-size: 12px;
+  color: var(--rc-ink-2);
+}
+
+.rc-promo__saisie {
+  width: 110px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1.5px solid var(--rc-line-strong);
+  border-radius: 10px;
+  background: var(--rc-surface);
+  color: var(--rc-ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: end;
+}
+
+.rc-promo__saisie:focus {
+  outline: none;
+  border-color: var(--rc-accent);
+}
+
+.rc-promo__saisie--court {
+  width: 70px;
+}
+
+.rc-promo__choix {
+  max-width: 220px;
+  min-height: 36px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1.5px dashed var(--rc-line-strong);
+  border-radius: 10px;
+  background: var(--rc-fill);
+  color: var(--rc-ink);
+  font: inherit;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rc-promo__effet {
+  color: var(--rc-ink-2);
+  font-size: 13px;
+}
+
+.rc-promo__vide {
+  color: var(--rc-ink-3);
+}
+
+.rc-promo__plancher {
+  color: var(--rc-ink-2);
+}
+
+.rc-promo__sous-plancher .rc-promo__saisie {
+  border-color: var(--rc-danger);
+  background: var(--rc-danger-soft, #fdecec);
+}
+
+.rc-promo__gain {
+  font-weight: 800;
+  color: var(--rc-positive, #16794a);
+  white-space: nowrap;
+}
+
+.rc-promo__gain small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rc-ink-3);
+}
+
+.rc-promo__gain--perte {
+  color: var(--rc-danger);
+}
+
+/* Fenêtre « Nouvelle promotion » : marges intérieures (le corps de la fenêtre n'en a pas). */
+.rc-promo-choix {
+  padding: var(--rc-space-4) var(--rc-gutter) 0;
+}
+
+.rc-promo-choix__note {
+  margin: var(--rc-space-4) var(--rc-gutter) var(--rc-space-2);
+}
+
+/* ---------- Promotion › Résultats ---------- */
+.rc-res {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+
+.rc-res__periode {
+  margin: 0;
+}
+
+.rc-res__chiffres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--rc-space-3);
+}
+
+.rc-res__chiffre {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--rc-space-4);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+/* Libellé de la carte (pas le montant : Money est aussi un span). */
+.rc-res__chiffre > span:not(.rc-money) {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rc-ink-2);
+}
+
+.rc-res__chiffre > strong {
+  font-size: var(--rc-text-amount, 28px);
+  line-height: 1.1;
+}
+
+.rc-res__chiffre small {
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-res__hausse {
+  font-weight: 800;
+  color: var(--rc-positive, #16794a);
+  white-space: nowrap;
+}
+
+.rc-res__baisse {
+  font-weight: 800;
+  color: var(--rc-danger);
+  white-space: nowrap;
+}
+
+.rc-res__neutre {
+  color: var(--rc-ink-2);
+}
+
+/* Courbe : une barre par jour, grise avant, couleur pendant la promotion. */
+.rc-res__courbe {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 180px;
+  padding: var(--rc-space-3);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: 0 0 0 1px var(--rc-line);
+}
+
+.rc-res__jour {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.rc-res__barre {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+}
+
+.rc-res__barre--avant {
+  background: var(--rc-line-strong);
+}
+
+.rc-res__barre--pendant {
+  background: var(--rc-accent);
+}
+
+.rc-res__legende {
+  display: flex;
+  gap: var(--rc-space-4);
+  margin-top: var(--rc-space-2);
+  font-size: var(--rc-text-meta);
+  color: var(--rc-ink-2);
+}
+
+.rc-res__cle::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.rc-res__cle--avant::before {
+  background: var(--rc-line-strong);
+}
+
+.rc-res__cle--pendant::before {
+  background: var(--rc-accent);
+}
+
+.rc-res__comparaison {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+
+.rc-res__comparaison > span {
+  font-weight: 700;
+  color: var(--rc-ink-2);
+}
+
+/* ---------------------------------------------------------------- Supermarché › Caisse (admin) */
+.rc-lien {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--rc-accent);
+  font: inherit;
+  font-size: var(--rc-text-meta);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rc-caisse-case {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-2) 0;
+  cursor: pointer;
+}
+.rc-caisse-case input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--rc-accent);
+  flex: none;
+}
+.rc-caisse-case span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rc-caisse-case small {
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-caisse-droits {
+  border: 1px solid var(--rc-line);
+  border-radius: var(--rc-radius-md);
+  padding: var(--rc-space-3) var(--rc-space-4);
+}
+.rc-caisse-droits__tete {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--rc-space-1);
+}
+.rc-caisse-appairage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  padding: var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-fill);
+}
+.rc-caisse-appairage > span {
+  display: flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  font-weight: 600;
+}
+.rc-caisse-appairage small {
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-caisse-appairage__code {
+  font-family: var(--rc-font-display);
+  font-size: 44px;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  color: var(--rc-accent);
+  line-height: 1.1;
+}
+.rc-caisse-appairage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+  margin-top: var(--rc-space-1);
+}
+
+/* Touches rapides : familles à gauche, grille des touches comme sur la caisse. */
+.rc-touches__actions {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+  margin-bottom: var(--rc-space-4);
+  padding: var(--rc-space-3) 0;
+  background: var(--rc-bg);
+}
+.rc-touches__etat {
+  flex: 1;
+  min-width: 240px;
+}
+.rc-touches__etat .rc-notice {
+  margin: 0;
+}
+.rc-touches__a-jour {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rc-space-2);
+  color: var(--rc-ink-2);
+}
+.rc-touches__a-jour ion-icon {
+  color: var(--rc-positive);
+  font-size: 20px;
+}
+.rc-touches {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--rc-space-5);
+  align-items: start;
+}
+.rc-touches__familles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+}
+.rc-touches__famille {
+  --rc-couleur: var(--rc-ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rc-space-2);
+  min-height: 48px;
+  padding: 0 var(--rc-space-4) 0 var(--rc-space-1);
+  border: 0;
+  border-left: 6px solid var(--rc-couleur);
+  border-radius: var(--rc-radius-sm);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+  color: var(--rc-ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--rc-dur-base) var(--rc-ease);
+}
+.rc-touches__famille-nom {
+  flex: 1;
+}
+.rc-touches__poignee {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--rc-radius-sm);
+  color: inherit;
+  opacity: 0.6;
+  font-size: 20px;
+  user-select: none;
+}
+.rc-touches__poignee:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.15);
+}
+.rc-touches--glisse {
+  opacity: 0.55;
+  transform: scale(0.97);
+  outline: 2px dashed var(--rc-ink-3);
+  outline-offset: 2px;
+}
+.rc-touches__famille small {
+  color: var(--rc-ink-3);
+  font-weight: 500;
+}
+.rc-touches__famille--active {
+  background: var(--rc-couleur);
+  color: #fff;
+  box-shadow: none;
+}
+.rc-touches__famille--active small {
+  color: rgba(255, 255, 255, 0.85);
+}
+.rc-touches__famille--ajout {
+  justify-content: center;
+  padding: 0 var(--rc-space-4);
+  border: 1px dashed var(--rc-line-strong);
+  box-shadow: none;
+  background: none;
+  color: var(--rc-accent);
+}
+.rc-touches__zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-4);
+  min-width: 0;
+}
+.rc-touches__barre {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+.rc-touches__barre > strong {
+  font-size: var(--rc-text-title);
+}
+.rc-touches__espace {
+  flex: 1;
+}
+.rc-touches__vide {
+  padding: var(--rc-space-8) 0;
+  text-align: center;
+}
+.rc-touches__grille {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--rc-space-3);
+}
+.rc-touches__touche {
+  --rc-couleur: var(--rc-accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rc-space-1);
+  min-height: 124px;
+  padding: 36px var(--rc-space-2) var(--rc-space-2);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-couleur);
+  color: #fff;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--rc-dur-base) var(--rc-ease), box-shadow var(--rc-dur-base) var(--rc-ease);
+}
+/* Touche choisie (pour changer la couleur d'un groupe) : anneau bien visible. */
+.rc-touches__touche--choisie {
+  box-shadow: 0 0 0 3px var(--rc-bg), 0 0 0 6px var(--rc-ink);
+}
+.rc-touches__touche .rc-touches__poignee {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 30px;
+  height: 30px;
+}
+.rc-touches__coche {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 22px;
+  color: #fff;
+}
+.rc-touches__nom {
+  font-weight: 600;
+  font-size: var(--rc-text-meta);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rc-touches__prix {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--rc-text-meta);
+  opacity: 0.85;
+}
+.rc-touches__libelle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: auto;
+  border: 0;
+  border-radius: var(--rc-radius-full);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+}
+.rc-touches__libelle:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+.rc-touches__selection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rc-space-3);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line-strong);
+}
+.rc-touches__couleurs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+.rc-touches__pastille {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--rc-radius-full);
+  cursor: pointer;
+  box-shadow: 0 0 0 2px var(--rc-surface);
+}
+.rc-touches__pastille--libre {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: conic-gradient(#e53935, #fdd835, #43a047, #1e88e5, #8e24aa, #e53935);
+  color: #fff;
+  font-size: 18px;
+}
+.rc-touches__pastille--libre input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.rc-touches__pastille--active {
+  box-shadow: 0 0 0 2px var(--rc-surface), 0 0 0 4px var(--rc-ink);
+}
+
+/* Synthèse : barres par mode de règlement. */
+.rc-caisse-modes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+.rc-caisse-modes li {
+  display: grid;
+  grid-template-columns: 160px 1fr 130px;
+  align-items: center;
+  gap: var(--rc-space-3);
+}
+.rc-caisse-modes li > :last-child {
+  text-align: right;
+}
+.rc-caisse-modes__barre {
+  height: 10px;
+  border-radius: var(--rc-radius-full);
+  background: var(--rc-fill);
+  overflow: hidden;
+}
+.rc-caisse-modes__barre span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--rc-accent);
+}
+
+/* Ticket et clôture, présentés comme imprimés. */
+.rc-caisse-ticket {
+  max-width: 460px;
+  margin: 0 auto var(--rc-space-4);
+  padding: var(--rc-space-4) var(--rc-space-5);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+  font-variant-numeric: tabular-nums;
+}
+.rc-caisse-ticket__tete {
+  margin: 0 0 var(--rc-space-3);
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-caisse-ticket table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--rc-space-2);
+}
+.rc-caisse-ticket td {
+  padding: var(--rc-space-1) 0;
+  vertical-align: top;
+  border-bottom: 1px dashed var(--rc-line);
+}
+.rc-caisse-ticket td small {
+  display: block;
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-caisse-ticket td.rc-caisse-ticket__montant {
+  text-align: right;
+  white-space: nowrap;
+  padding-left: var(--rc-space-3);
+}
+.rc-caisse-ticket__ligne {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--rc-space-3);
+  margin: var(--rc-space-1) 0;
+}
+.rc-caisse-ticket__ligne small {
+  color: var(--rc-ink-3);
+}
+.rc-caisse-ticket__total {
+  font-size: var(--rc-text-title);
+  font-weight: 700;
+  margin: var(--rc-space-2) 0;
+}
+.rc-caisse-ticket__petit {
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-caisse-ticket hr {
+  border: 0;
+  border-top: 1px dashed var(--rc-line-strong);
+  margin: var(--rc-space-2) 0;
+}
+@media (max-width: 767px) {
+  .rc-touches {
+    grid-template-columns: 1fr;
+  }
+  .rc-touches__familles {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .rc-caisse-modes li {
+    grid-template-columns: 110px 1fr 100px;
+  }
+}
+
+/* Caisse › Clôtures : une ligne par caissier, total de la période, détail dépliable. */
+.rc-clot table th.n,
+.rc-clot table td.n {
+  text-align: right;
+  white-space: nowrap;
+}
+.rc-clot td small {
+  display: block;
+  color: var(--rc-ink-3);
+  font-size: var(--rc-text-meta);
+}
+.rc-clot__chev {
+  width: 28px;
+  color: var(--rc-ink-3);
+}
+.rc-clot__zero {
+  color: var(--rc-ink-3);
+}
+.rc-clot__ligne--ouverte td {
+  background: var(--rc-fill);
+}
+.rc-clot__remis {
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  border-radius: var(--rc-radius-xs);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.rc-clot__remis small {
+  display: inline;
+}
+.rc-clot__remis:hover {
+  background: var(--rc-fill-strong);
+}
+.rc-clot tfoot td {
+  padding: var(--rc-space-3) var(--rc-space-3);
+  border-top: 2px solid var(--rc-line-strong);
+  background: var(--rc-fill);
+  font-weight: 800;
+}
+.rc-clot__detail td {
+  background: var(--rc-fill);
+  padding-top: 0;
+}
+.rc-clot__blocs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.8fr);
+  gap: var(--rc-space-4);
+  padding: var(--rc-space-2) 0 var(--rc-space-3);
+}
+.rc-clot__bloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-2);
+  padding: var(--rc-space-3);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+  white-space: normal;
+}
+.rc-clot__bloc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rc-clot__bloc li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--rc-space-3);
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--rc-line);
+}
+.rc-clot__bloc li:last-child {
+  border-bottom: 0;
+}
+.rc-clot__bloc li small {
+  display: inline;
+}
+.rc-clot__bloc p {
+  margin: 0;
+}
+.rc-clot__verif {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--rc-space-2) var(--rc-space-4);
+  padding: var(--rc-space-3) var(--rc-space-4);
+  border-radius: var(--rc-radius-md);
+  background: var(--rc-fill);
+}
+/* Table compacte : unité « TND » rappelée sous la table, colonnes serrées. */
+.rc-clot .rc-money__unit {
+  display: none;
+}
+.rc-clot table th,
+.rc-clot table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.rc-clot__detail > td {
+  max-width: 0;
+}
+
+/* Réglages communs des caisses (sous la liste des postes). */
+.rc-caisse-param {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--rc-space-3) var(--rc-space-5);
+  margin-top: var(--rc-space-5);
+  padding: var(--rc-space-4) var(--rc-space-5);
+  border-radius: var(--rc-radius-lg);
+  background: var(--rc-surface);
+  box-shadow: inset 0 0 0 1px var(--rc-line);
+}
+.rc-caisse-param p {
+  margin: 4px 0 0;
+}
+.rc-caisse-param__saisie {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rc-space-2);
+}
+.rc-caisse-param__saisie .rc-field {
+  width: 120px;
+}
+.rc-caisse-param > .rc-notice,
+.rc-caisse-param > :last-child:not(:nth-child(2)) {
+  grid-column: 1 / -1;
 }

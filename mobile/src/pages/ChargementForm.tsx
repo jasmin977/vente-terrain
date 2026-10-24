@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { IonContent, IonPage, useIonViewWillEnter } from "@ionic/react";
-import { addOutline, checkmarkOutline } from "ionicons/icons";
+import { addOutline, checkmarkOutline, phonePortraitOutline } from "ionicons/icons";
 import { listArticles } from "../api/articles";
 import { createChargement, createEntreeDepot, getNumeroSuivant, getStockCamion, getStockDepot } from "../api/stock";
 import { listUsers } from "../api/auth";
@@ -10,6 +10,7 @@ import type { UserSummary } from "../types/auth";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import ArticleImage from "../components/ArticleImage";
+import ImportCollecteSheet, { type LigneImportee } from "../components/ImportCollecteSheet";
 import ArticlePickerModal from "./ArticlePickerModal";
 import ChampDateExpiration from "../components/ChampDateExpiration";
 import FlecheVariation from "../components/FlecheVariation";
@@ -140,6 +141,29 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
     setPickerOpen(false);
   };
 
+  // Collecte du PDA (quantités en pièces) : réparties en colis + pièces, ajoutées aux lignes déjà là.
+  const [importPda, setImportPda] = useState(false);
+  const importerCollecte = (importees: LigneImportee[]) => {
+    let refusees = 0;
+    setLignes((ls) => {
+      const resultat = [...ls];
+      for (const imp of importees) {
+        if (!articleMap.has(imp.articleId)) {
+          refusees++;
+          continue;
+        }
+        const c = colisage(imp.articleId);
+        const i = resultat.findIndex((l) => l.articleId === imp.articleId);
+        const unites = Math.round((i >= 0 ? enUnites(resultat[i]) : 0) + imp.quantite);
+        const ligne = { colis: c > 1 ? Math.floor(unites / c) : 0, pieces: c > 1 ? unites % c : unites };
+        if (i >= 0) resultat[i] = { ...resultat[i], ...ligne };
+        else resultat.push({ articleId: imp.articleId, ...ligne });
+      }
+      return resultat;
+    });
+    return refusees;
+  };
+
   const updateLine = (articleId: string, champ: "colis" | "pieces", valeur: number) =>
     setLignes((ls) => ls.map((l) => (l.articleId === articleId ? { ...l, [champ]: Math.max(0, Math.trunc(valeur) || 0) } : l)));
   const updateLigne = (articleId: string, champs: Partial<Line>) =>
@@ -204,8 +228,6 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
       ? t("Vérifiez les quantités")
       : lignes.some((l) => prixLigne(l)?.invalide)
       ? t("Vérifiez les prix")
-      : lignes.some(manqueDepot)
-      ? t("Stock dépôt insuffisant pour un article")
       : null;
 
   const handleSubmit = async () => {
@@ -314,9 +336,9 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
                     leading={<ArticleImage src={article?.img} alt="" size={44} />}
                     title={name}
                     meta={joinMeta([t("Colis de {n}", { n: c }), reperes(l.articleId)])}
-                    error={
+                    warning={
                       manqueDepot(l)
-                        ? t("Le dépôt n'a que {q} ({colis}).", {
+                        ? t("Le dépôt n'a que {q} ({colis}) : son stock passera en négatif.", {
                             q: `${dispo} ${pieces(dispo)}`,
                             colis: formatColis(dispo, c),
                           })
@@ -338,7 +360,7 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
                               })}
                               min={0}
                               value={l.colis}
-                              error={manqueDepot(l) || !(u > 0)}
+                              error={!(u > 0)}
                               onStep={(d) => updateLine(l.articleId, "colis", l.colis + d)}
                               onInput={(q) => updateLine(l.articleId, "colis", q)}
                             />
@@ -352,7 +374,7 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
                             label={t("Quantité {nom} en pièces", { nom: name })}
                             min={0}
                             value={l.pieces}
-                            error={manqueDepot(l) || !(u > 0)}
+                            error={!(u > 0)}
                             onStep={(d) => updateLine(l.articleId, "pieces", l.pieces + d)}
                             onInput={(q) => updateLine(l.articleId, "pieces", q)}
                           />
@@ -402,6 +424,10 @@ export default function ChargementForm({ kind = "chargement" }: { kind?: Kind })
           >
             {lignes.length > 0 ? t("Ajouter ou retirer des articles") : t("Choisir des articles")}
           </Button>
+          <Button variant="ghost" block icon={phonePortraitOutline} onClick={() => setImportPda(true)} disabled={articles.length === 0}>
+            {t("Télécharger depuis le PDA")}
+          </Button>
+          <ImportCollecteSheet isOpen={importPda} onDismiss={() => setImportPda(false)} destination={t(bon.titre)} onImporter={importerCollecte} />
         </Section>
 
         {entree && lignes.length > 0 && (

@@ -1,14 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Geolocation } from "@capacitor/geolocation";
 import { IonContent, IonPage } from "@ionic/react";
-import { addOutline, personAddOutline } from "ionicons/icons";
-import { createFacture, listArticles, listClients } from "../offline/donnees";
+import { addOutline, barcodeOutline, personAddOutline, phonePortraitOutline } from "ionicons/icons";
+import { createFacture, listArticles, listClients, listPromotionsActives } from "../offline/donnees";
+import type { Promotion } from "../types/promotion";
+import { appliquerPromotions, htLigne } from "../utils/promotions";
+import { listUsers } from "../api/auth";
+import type { UserSummary } from "../types/auth";
+import { useAuth } from "../auth/AuthContext";
 import type { Client } from "../types/client";
 import type { Article } from "../types/article";
 import type { ModePaiement, TypeVente } from "../types/facture";
 import { ApiError } from "../api/client";
+import ImportCollecteSheet, { type LigneImportee } from "../components/ImportCollecteSheet";
 import ArticleImage from "../components/ArticleImage";
+import ScanMultiple, { type ArticleScanne } from "../components/ScanMultiple";
+import { scanCameraDisponible } from "../lib/barcode";
 import { arrondir, ttcDepuisHT } from "../utils/tarifs";
 import ArticlePickerModal from "./ArticlePickerModal";
 import ClientQuickSheet from "./ClientQuickSheet";
@@ -45,6 +53,12 @@ const modesPaiement: ModePaiement[] = ["ESPECES", "CHEQUE", "VIREMENT"];
 
 export default function FactureForm() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  // Admin : le bon est fait au nom d'un vendeur, dont le camion livre (son numéro de série, son stock camion).
+  const [vendeurs, setVendeurs] = useState<UserSummary[]>([]);
+  const [vendeurId, setVendeurId] = useState<string | undefined>(undefined);
+  const [vendeurSheet, setVendeurSheet] = useState(false);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -59,6 +73,8 @@ export default function FactureForm() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Promotions en cours : appliquées d'elles-mêmes (prix promo, pièces offertes, remises, article offert).
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -68,6 +84,10 @@ export default function FactureForm() {
         const [c, a] = await Promise.all([listClients(), listArticles()]);
         setClients(c);
         setArticles(a);
+        listPromotionsActives()
+          .then(setPromotions)
+          .catch(() => setPromotions([]));
+        if (isAdmin) setVendeurs((await listUsers()).filter((u) => u.role === "VENDEUR" && u.actif));
       } catch (err) {
         setError(err instanceof ApiError ? err.message : t("Impossible de charger les données"));
       } finally {
@@ -97,6 +117,56 @@ export default function FactureForm() {
     setPickerOpen(false);
   };
 
+  // Scan de plusieurs articles à la caméra : ajoutés au bon, quantité additionnée s'ils y sont déjà.
+  const [scanMultiple, setScanMultiple] = useState(false);
+  const ajouterScannes = (scannes: ArticleScanne[]) => {
+    setLignes((ls) => {
+      const resultat = [...ls];
+      for (const s of scannes) {
+        const article = articles.find((a) => a.id === s.articleId);
+        if (!article) continue;
+        const i = resultat.findIndex((l) => l.articleId === s.articleId);
+        if (i >= 0) resultat[i] = { ...resultat[i], quantite: resultat[i].quantite + s.quantite };
+        else
+          resultat.push({
+            articleId: s.articleId,
+            quantite: s.quantite,
+            prixUnitaire: arrondir(Number(article.prixVente) * (1 + Number(article.fodec ?? 0) / 100), 6),
+            tauxTva: Number(article.tva),
+          });
+      }
+      return resultat;
+    });
+    setScanMultiple(false);
+  };
+
+  // Collecte du PDA (admin) : articles reconnus ajoutés au bon, quantité additionnée s'ils y sont déjà.
+  const [importPda, setImportPda] = useState(false);
+  const importerCollecte = (importees: LigneImportee[]) => {
+    let refusees = 0;
+    setLignes((ls) => {
+      const resultat = [...ls];
+      for (const imp of importees) {
+        const article = articles.find((a) => a.id === imp.articleId);
+        if (!article) {
+          refusees++;
+          continue;
+        }
+        const i = resultat.findIndex((l) => l.articleId === imp.articleId);
+        if (i >= 0) resultat[i] = { ...resultat[i], quantite: resultat[i].quantite + imp.quantite };
+        else
+          resultat.push({
+            articleId: imp.articleId,
+            quantite: imp.quantite,
+            prixUnitaire: arrondir(Number(article.prixVente) * (1 + Number(article.fodec ?? 0) / 100), 6),
+            tauxTva: Number(article.tva),
+          });
+      }
+      return resultat;
+    });
+    return refusees;
+  };
+
   const updateLine = (articleId: string, patch: Partial<Line>) =>
     setLignes((ls) => ls.map((l) => (l.articleId === articleId ? { ...l, ...patch } : l)));
 
@@ -111,9 +181,14 @@ export default function FactureForm() {
 
   const removeLine = (articleId: string) => setLignes((ls) => ls.filter((l) => l.articleId !== articleId));
 
-  const { ht: totalHT, tva: totalTVA } = lignes.reduce(
+  // Lignes du bon une fois les promotions appliquées : ce qui est enregistré et imprimé.
+  const articleMap = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
+  const appliquees = useMemo(() => appliquerPromotions(lignes, promotions, articleMap), [lignes, promotions, articleMap]);
+  const offerts = appliquees.slice(lignes.length);
+
+  const { ht: totalHT, tva: totalTVA } = appliquees.reduce(
     (acc, l) => {
-      const ht = l.quantite * l.prixUnitaire;
+      const ht = htLigne(l);
       const tva = (ht * l.tauxTva) / 100;
       return { ht: acc.ht + ht, tva: acc.tva + tva };
     },
@@ -142,13 +217,16 @@ export default function FactureForm() {
   };
 
   const valid =
+    (!isAdmin || vendeurId) &&
     clientId &&
     lignes.length > 0 &&
     lignes.every((l) => l.articleId && l.quantite > 0) &&
     (typeVente === "CREDIT" || modePaiement);
 
   // Indique au vendeur ce qui manque, au lieu d'un bouton grisé muet.
-  const missing = !clientId
+  const missing = isAdmin && !vendeurId
+    ? t("Choisissez le vendeur")
+    : !clientId
     ? t("Choisissez un client")
     : lignes.length === 0
       ? t("Ajoutez au moins un article")
@@ -163,14 +241,22 @@ export default function FactureForm() {
     setError(null);
     setSaving(true);
     try {
-      const position = await getCurrentPositionSilently();
+      // L'admin saisit depuis un ordinateur : pas de position GPS (et pas de demande d'autorisation).
+      const position = isAdmin ? null : await getCurrentPositionSilently();
       const facture = await createFacture({
+        vendeurId: isAdmin ? vendeurId : undefined,
         clientId,
         typeVente,
         modePaiement: typeVente === "COMPTANT" ? modePaiement : undefined,
         latitude: position?.latitude,
         longitude: position?.longitude,
-        lignes,
+        lignes: appliquees.map((l) => ({
+          articleId: l.articleId,
+          quantite: l.quantite,
+          prixUnitaire: l.prixUnitaire,
+          tauxTva: l.tauxTva,
+          ...(l.promotionId ? { quantiteOfferte: l.quantiteOfferte, remise: l.remise, promotionId: l.promotionId } : {}),
+        })),
       });
       // Impression discrète du ticket : un échec (imprimante éteinte, IP non
       // configurée) ne doit jamais empêcher la vente d'être enregistrée.
@@ -192,6 +278,19 @@ export default function FactureForm() {
 
       <IonContent>
         {error && <PageNotice>{error}</PageNotice>}
+
+        {isAdmin && (
+          <Section label={t("Vendeur")}>
+            <PickerField
+              label={t("Vendeur (camion de départ)")}
+              required
+              placeholder={t("Choisir un vendeur")}
+              value={vendeurs.find((v) => v.id === vendeurId)?.nom}
+              meta={vendeurs.find((v) => v.id === vendeurId)?.code}
+              onOpen={() => setVendeurSheet(true)}
+            />
+          </Section>
+        )}
 
         <Section label={t("Client")}>
           <PickerField
@@ -240,9 +339,11 @@ export default function FactureForm() {
         <Section label={t("Articles")} aside={lignes.length > 0 ? `${lignes.length}` : undefined}>
           {lignes.length > 0 && (
             <Group>
-              {lignes.map((line) => {
+              {lignes.map((line, i) => {
                 const article = articles.find((a) => a.id === line.articleId);
                 const name = article?.designation ?? t("Article");
+                const p = appliquees[i];
+                const prixChange = p.prixUnitaire !== line.prixUnitaire;
                 return (
                   <LineItem
                     key={line.articleId}
@@ -250,7 +351,14 @@ export default function FactureForm() {
                     title={name}
                     meta={
                       <>
-                        {formatAmount(ttcDepuisHT(line.prixUnitaire, line.tauxTva))} {t("TND")}{article?.unit ? ` · ${article.unit}` : ""}
+                        {prixChange && <s className="rc-promo-bl__ancien">{formatAmount(ttcDepuisHT(line.prixUnitaire, line.tauxTva))}</s>}
+                        {formatAmount(ttcDepuisHT(p.prixUnitaire, p.tauxTva))} {t("TND")}{article?.unit ? ` · ${article.unit}` : ""}
+                        {p.promo && (
+                          <span className={`rc-promo-bl${p.promotionId ? "" : " rc-promo-bl--attente"}`}>
+                            {p.promo.numero} · {p.promo.texte}
+                            {p.remise > 0 ? ` · −${formatAmount(p.remise * (1 + p.tauxTva / 100))}` : ""}
+                          </span>
+                        )}
                       </>
                     }
                     removeLabel={t("Retirer {nom}", { nom: name })}
@@ -263,7 +371,24 @@ export default function FactureForm() {
                         onInput={(q) => updateLine(line.articleId, { quantite: q })}
                       />
                     }
-                    amount={<Money value={line.quantite * line.prixUnitaire * (1 + line.tauxTva / 100)} />}
+                    amount={<Money value={htLigne(p) * (1 + p.tauxTva / 100)} />}
+                  />
+                );
+              })}
+              {/* Articles offerts par une promotion (« article offert ») : ajoutés à 0. */}
+              {offerts.map((o) => {
+                const article = articles.find((a) => a.id === o.articleId);
+                const name = article?.designation ?? t("Article");
+                return (
+                  <LineItem
+                    key={`offert-${o.articleId}`}
+                    leading={<ArticleImage src={article?.img} alt={name} size={44} />}
+                    title={name}
+                    meta={<span className="rc-promo-bl">{o.promo?.numero} · {t("Offert")}</span>}
+                    removeLabel={t("Offert par la promotion")}
+                    onRemove={() => undefined}
+                    control={<Tag tone="positive">{t("{n} offert(s)", { n: o.quantiteOfferte })}</Tag>}
+                    amount={<Money value={0} />}
                   />
                 );
               })}
@@ -279,6 +404,20 @@ export default function FactureForm() {
           >
             {lignes.length > 0 ? t("Ajouter ou retirer des articles") : t("Ajouter des articles")}
           </Button>
+          {scanCameraDisponible() && (
+            <Button variant="primary" size="lg" block icon={barcodeOutline} onClick={() => setScanMultiple(true)} disabled={!loaded || articles.length === 0}>
+              {t("Scanner plusieurs articles")}
+            </Button>
+          )}
+          <ScanMultiple ouvert={scanMultiple} articles={articles} onValider={ajouterScannes} onFermer={() => setScanMultiple(false)} />
+          {user?.role === "ADMIN" && (
+            <>
+              <Button variant="ghost" block icon={phonePortraitOutline} onClick={() => setImportPda(true)} disabled={!loaded || articles.length === 0}>
+                {t("Télécharger depuis le PDA")}
+              </Button>
+              <ImportCollecteSheet isOpen={importPda} onDismiss={() => setImportPda(false)} destination={t("BL de vente")} onImporter={importerCollecte} />
+            </>
+          )}
         </Section>
       </IonContent>
 
@@ -344,6 +483,18 @@ export default function FactureForm() {
               </span>
             ) : undefined,
         }))}
+      />
+
+      <PickerSheet
+        isOpen={vendeurSheet}
+        title={t("Vendeur")}
+        value={vendeurId}
+        onDismiss={() => setVendeurSheet(false)}
+        onSelect={(v) => {
+          setVendeurId(v);
+          setVendeurSheet(false);
+        }}
+        options={vendeurs.map((v) => ({ value: v.id, label: v.nom, meta: v.code, keywords: v.code }))}
       />
 
       <ClientQuickSheet

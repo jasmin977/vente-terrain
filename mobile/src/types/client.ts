@@ -1,6 +1,8 @@
 export interface Client {
   id: string;
   code: string;
+  /** Référence auto-incrémentée par société ; absente tant qu'un client créé hors ligne n'est pas synchronisé. */
+  ref?: number;
   nomCommerce: string;
   responsable?: string | null;
   telephone?: string | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { IonAlert, IonContent, IonPage, useIonRouter, useIonToast } from "@ionic/react";
 import { clipboardOutline, imagesOutline, scanOutline, sparklesOutline, trashOutline } from "ionicons/icons";
 import { App } from "@capacitor/app";
@@ -15,12 +15,13 @@ import ArticleMouvements from "../components/ArticleMouvements";
 import { formatAmount, pieces } from "../utils/format";
 import { arrondir, htDepuisTTC, margeDepuis, ttcDepuisHT } from "../utils/tarifs";
 import ArticleHistoriquePrix from "../components/ArticleHistoriquePrix";
+import ArticleStockLots from "../components/ArticleStockLots";
+import ArticleFournisseurs from "../components/ArticleFournisseurs";
 import CodesBarresAlternatifs from "../components/CodesBarresAlternatifs";
 import SelecteurCategorie from "../components/SelecteurCategorie";
 import { chemin } from "../utils/categories";
 import { useCategories } from "../utils/useCategories";
 import { ActionBar, AppHeader, Button, Field, Group, IconButton, Money, PageNotice, PickerField, Section, Segmented, SkeletonList, Tag, useEcranLarge } from "../ui";
-import ChampDateExpiration from "../components/ChampDateExpiration";
 import { t } from "../i18n";
 
 const emptyForm: ArticleInput = {
@@ -40,10 +41,16 @@ const emptyForm: ArticleInput = {
   categorieId: null,
 };
 
+type Onglet = "fiche" | "tarifs" | "codes" | "stock" | "prix" | "fournisseurs" | "mouvements";
+
+/** Stock minimum par défaut (sans valeur sur l'article) : 5 colis, comme côté serveur. */
+const STOCK_MINI_COLIS = 5;
+
 export default function ArticleForm() {
   const { id } = useParams<{ id: string }>();
   const isNew = id === "new";
   const navigate = useNavigate();
+  const location = useLocation();
   const web = useEcranLarge();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN";
@@ -110,6 +117,8 @@ export default function ArticleForm() {
     })();
   }, [id, isNew]);
 
+  // Pièces par colis (au moins 1) : le stock minimum se saisit en colis.
+  const colisMini = Math.max(1, Number(form.colisage) || 1);
   const update = <K extends keyof ArticleInput>(key: K, value: ArticleInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -303,6 +312,29 @@ export default function ArticleForm() {
   };
 
   const ro = !canEdit;
+
+  // Rubriques de la fiche : une par onglet. L'historique (prix, fournisseurs, mouvements) n'existe qu'une fois créé.
+  const onglets: { value: Onglet; label: string }[] = [
+    { value: "fiche", label: t("Fiche") },
+    { value: "tarifs", label: t("Tarifs") },
+    { value: "codes", label: t("Codes-barres") },
+    ...(canEdit ? [{ value: "stock" as Onglet, label: isNew ? t("Alertes de stock") : t("Stock et expiration") }] : []),
+    ...(canEdit && !isNew
+      ? [
+          { value: "prix" as Onglet, label: t("Historique des prix") },
+          { value: "fournisseurs" as Onglet, label: t("Fournisseurs") },
+          { value: "mouvements" as Onglet, label: t("Mouvements") },
+        ]
+      : []),
+  ];
+  const demande = new URLSearchParams(location.search).get("onglet") as Onglet | null;
+  const onglet: Onglet = onglets.some((o) => o.value === demande) ? demande! : "fiche";
+  const choisirOnglet = (o: Onglet) => {
+    const params = new URLSearchParams(location.search);
+    if (o === "fiche") params.delete("onglet");
+    else params.set("onglet", o);
+    navigate({ pathname: location.pathname, search: params.toString() ? `?${params}` : "" }, { replace: true });
+  };
   const num = (v: string, fallback: number) => (v === "" ? fallback : Number(v));
 
   return (
@@ -333,259 +365,309 @@ export default function ArticleForm() {
         {loading ? (
           <SkeletonList rows={5} />
         ) : (
-          <div className="rc-grille">
-            {/* Fiche : l'essentiel d'un coup d'œil (prix payé par le client, taxes, marge, stock). */}
-            {canEdit && !isNew && (
-              <div className="rc-summary">
-                <p className="rc-summary__label">{t("Prix de vente TTC")}</p>
-                <Money value={ttcDepuisHT(form.prixVente, form.tva, form.fodec)} size="xl" />
+          <>
+            {/* En-tête fixe : l'article et l'essentiel d'un coup d'œil (prix client, taxes, marge, stock). */}
+            <div className="rc-article-entete">
+              <ArticleImage src={form.img} alt={form.designation || t("Article")} size={64} />
+              <div className="rc-article-entete__corps">
+                <p className="rc-article-entete__nom">{form.designation || t("Nouvel article")}</p>
                 <div className="rc-fiche__tags">
+                  {form.codeBarre && <Tag>{form.codeBarre}</Tag>}
                   <Tag>{t("TVA {n} %", { n: form.tva })}</Tag>
                   {form.fodec > 0 && <Tag>{t("FODEC {n} %", { n: form.fodec })}</Tag>}
-                  {prix.marge !== "" && (
-                    <Tag tone={Number(prix.marge) < 0 ? "danger" : "accent"}>{t("Marge {n} %", { n: prix.marge })}</Tag>
-                  )}
-                  {stockDepot !== undefined && (
-                    <Tag tone={stockDepot <= 0 ? "warning" : "positive"}>
-                      {t("Dépôt : {q}", { q: `${stockDepot} ${pieces(stockDepot)}` })}
-                    </Tag>
+                  {canEdit && prix.marge !== "" && <Tag tone={Number(prix.marge) < 0 ? "danger" : "accent"}>{t("Marge {n} %", { n: prix.marge })}</Tag>}
+                  {canEdit && stockDepot !== undefined && (
+                    <Tag tone={stockDepot <= 0 ? "warning" : "positive"}>{t("Dépôt : {q}", { q: `${stockDepot} ${pieces(stockDepot)}` })}</Tag>
                   )}
                 </div>
               </div>
-            )}
-
-            <div className="rc-media">
-              <ArticleImage src={form.img} alt={form.designation || t("Article")} size={112} />
-              <div className="rc-media__body">
-                {ro ? (
-                  <>
-                    <p className="rc-media__title">{form.designation}</p>
-                    <p className="rc-media__meta rc-num">{formatAmount(form.prixVente)} {t("TND")}</p>
-                  </>
-                ) : (
-                  <Field
-                    label={t("Lien de l'image")}
-                    placeholder="https://…"
-                    value={form.img ?? ""}
-                    onChange={(v) => update("img", v.trim())}
-                    inputMode="url"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    hint={t("Affichée en ligne seulement.")}
-                    suffix={
-                      <>
-                        <IconButton icon={imagesOutline} label={t("Chercher une photo sur Internet")} size="sm" onClick={chercherPhoto} />
-                        <IconButton icon={clipboardOutline} label={t("Coller le lien copié")} size="sm" onClick={() => void collerLien()} />
-                      </>
-                    }
-                  />
-                )}
+              <div className="rc-article-entete__prix">
+                <span>{t("Prix de vente TTC")}</span>
+                <Money value={ttcDepuisHT(form.prixVente, form.tva, form.fodec)} size="xl" />
               </div>
             </div>
 
-            <Section label={t("Identification")}>
-              <Group pad>
-                <div className="rc-fields">
-                  <Field
-                    label={t("Code-barres")}
-                    value={form.codeBarre}
-                    onChange={(v) => {
-                      update("codeBarre", v);
-                      setExistant(null);
-                    }}
-                    onBlur={() => void chercherExistant(form.codeBarre).then(setExistant)}
-                    readOnly={ro}
-                    required
-                    inputMode="numeric"
-                    // Douchette (ordinateur) : le code arrive tapé, suivi d'Entrée.
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void ouvrirSiExistant(form.codeBarre);
-                      }
-                    }}
-                    suffix={
-                      scanCameraDisponible() ? (
-                        <IconButton icon={scanOutline} label={t("Scanner le code-barres")} onClick={handleScanBarcode} disabled={scanning} />
-                      ) : undefined
-                    }
-                  />
-                  {(refUtilisee || form.code) && (
-                    <Field label={t("Réf")} hint={ro ? undefined : t("Facultative")} value={form.code} onChange={(v) => update("code", v)} readOnly={ro} autoCapitalize="characters" />
-                  )}
-                  <Field label={t("Désignation")} value={form.designation} onChange={(v) => update("designation", v)} readOnly={ro} required />
-                  {/* Catégorie facultative (création rapide) : un article sans catégorie est signalé « à classer » dans le dépôt. */}
-                  {ro ? (
-                    form.categorieId && <Field label={t("Catégorie")} value={chemin(categories, form.categorieId)} readOnly />
-                  ) : (
-                    categories.length > 0 && (
-                      <PickerField
-                        label={t("Catégorie")}
-                        value={form.categorieId ? chemin(categories, form.categorieId) : undefined}
-                        placeholder={t("Aucune : à classer plus tard")}
-                        onOpen={() => setCategorieOuverte(true)}
-                      />
-                    )
-                  )}
-                  <div className="rc-fields__row">
-                    <Field label={t("Marque")} value={form.marque} onChange={(v) => update("marque", v)} readOnly={ro} />
-                    <Field label={t("Unité")} placeholder={t("ex : 160 ML")} value={form.unit} onChange={(v) => update("unit", v)} readOnly={ro} />
-                  </div>
-                </div>
-              </Group>
-            </Section>
+            <div className="rc-article-onglets">
+              <Segmented label={t("Rubriques de l'article")} variant="onglets" value={onglet} onChange={choisirOnglet} options={onglets} />
+            </div>
 
-            <Section label={t("Tarifs et conditionnement")}>
-              <Group pad>
-                <div className="rc-fields">
-                  {/* Prix d'achat et marge : réservés à l'admin (le serveur ne les envoie pas aux vendeurs). */}
-                  {canEdit && (
-                    <div className="rc-fields__row">
+            {/* Une mise en page par onglet : Fiche sur deux colonnes (photo | identification), un seul bloc en pleine largeur. */}
+            <div className={`rc-grille rc-grille--${onglet}`}>
+              {onglet === "fiche" && (
+                <>
+                <div className="rc-media">
+                  <ArticleImage src={form.img} alt={form.designation || t("Article")} size={112} />
+                  <div className="rc-media__body">
+                    {ro ? (
+                      <>
+                        <p className="rc-media__title">{form.designation}</p>
+                        <p className="rc-media__meta rc-num">{formatAmount(form.prixVente)} {t("TND")}</p>
+                      </>
+                    ) : (
                       <Field
-                        label={t("Prix d'achat HT")}
-                        type="number"
-                        inputMode="decimal"
-                        value={form.prixAchat}
-                        onChange={surAchat}
-                        suffix="TND"
-                      />
-                      <Field
-                        label={t("Marge")}
-                        type="number"
-                        inputMode="decimal"
-                        value={prix.marge}
-                        onChange={surMarge}
-                        suffix="%"
-                        hint={form.prixAchat > 0 ? t("Sur le prix d'achat") : t("Renseignez le prix d'achat")}
-                      />
-                    </div>
-                  )}
-                  <div className="rc-fields__row">
-                    <Field
-                      label={t("Prix de vente TTC")}
-                      type="number"
-                      inputMode="decimal"
-                      value={ro ? formatAmount(ttcDepuisHT(form.prixVente, form.tva, form.fodec)) : prix.ttc}
-                      onChange={surTTC}
-                      readOnly={ro}
-                      staticSuffix="TND"
-                      suffix="TND"
-                    />
-                    <Field
-                      label={t("Prix de vente HT")}
-                      type="number"
-                      inputMode="decimal"
-                      value={ro ? formatAmount(form.prixVente) : prix.ht}
-                      onChange={surHT}
-                      readOnly={ro}
-                      staticSuffix="TND"
-                      suffix="TND"
-                    />
-                  </div>
-                  <div className="rc-fields__row">
-                    <Field
-                      label={t("Colisage")}
-                      type="number"
-                      inputMode="numeric"
-                      value={form.colisage}
-                      onChange={(v) => update("colisage", num(v, 0))}
-                      readOnly={ro}
-                      hint={ro ? undefined : t("Pièces par colis")}
-                    />
-                    <Field
-                      label={t("TVA")}
-                      type="number"
-                      inputMode="decimal"
-                      value={form.tva}
-                      onChange={surTva}
-                      readOnly={ro}
-                      staticSuffix="%"
-                      suffix="%"
-                    />
-                  </div>
-                  {canEdit && (
-                    <div className="rc-fields__row">
-                      <Field
-                        label={t("FODEC")}
-                        type="number"
-                        inputMode="decimal"
-                        value={form.fodec}
-                        onChange={surFodec}
-                        suffix="%"
-                        hint={t("1 % du prix HT, sinon 0")}
-                      />
-                      <Field
-                        label={t("Prix de gros TTC")}
-                        type="number"
-                        inputMode="decimal"
-                        value={prix.gros}
-                        onChange={surGros}
-                        suffix="TND"
-                        hint={t("Facultatif")}
-                      />
-                    </div>
-                  )}
-                </div>
-              </Group>
-            </Section>
-
-            {/* Couleurs du plan 3D du dépôt : stock bas sous le stock minimum, bleu pour une nouveauté ou une promotion. */}
-            {canEdit && (
-              <Section label={t("Alertes de stock")}>
-                <Group pad>
-                  <div className="rc-fields">
-                    <Field
-                      label={t("Stock minimum (pièces)")}
-                      type="number"
-                      inputMode="numeric"
-                      value={form.stockMini ?? ""}
-                      onChange={(v) => update("stockMini", v.trim() === "" ? null : Math.max(0, Number(v)) || null)}
-                      hint={t("Vide : un colis. En dessous, l'article passe en orange sur le plan 3D.")}
-                    />
-                    <Segmented
-                      label={t("Mise en avant")}
-                      value={form.etiquette ?? "AUCUNE"}
-                      onChange={(v) => {
-                        update("etiquette", v === "AUCUNE" ? null : v);
-                        if (v === "AUCUNE") update("etiquetteJusqua", null);
-                      }}
-                      options={[
-                        { value: "AUCUNE", label: t("Aucune") },
-                        { value: "NOUVEAU", label: t("Nouveauté") },
-                        { value: "PROMOTION", label: t("Promotion") },
-                      ]}
-                    />
-                    {form.etiquette && (
-                      <ChampDateExpiration
-                        label={t("Jusqu'au (facultatif)")}
-                        value={form.etiquetteJusqua ?? ""}
-                        onChange={(d) => update("etiquetteJusqua", d || null)}
+                        label={t("Lien de l'image")}
+                        placeholder="https://…"
+                        value={form.img ?? ""}
+                        onChange={(v) => update("img", v.trim())}
+                        inputMode="url"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        hint={t("Affichée en ligne seulement.")}
+                        suffix={
+                          <>
+                            <IconButton icon={imagesOutline} label={t("Chercher une photo sur Internet")} size="sm" onClick={chercherPhoto} />
+                            <IconButton icon={clipboardOutline} label={t("Coller le lien copié")} size="sm" onClick={() => void collerLien()} />
+                          </>
+                        }
                       />
                     )}
                   </div>
-                </Group>
-              </Section>
-            )}
+                </div>
 
-            <CodesBarresAlternatifs
-              value={form.codesBarres ?? []}
-              onChange={(codes) => update("codesBarres", codes)}
-              readOnly={ro}
-              codePrincipal={form.codeBarre}
-            />
+                <Section label={t("Identification")}>
+                  <Group pad>
+                    <div className="rc-fields">
+                      <Field
+                        label={t("Code-barres")}
+                        value={form.codeBarre}
+                        onChange={(v) => {
+                          update("codeBarre", v);
+                          setExistant(null);
+                        }}
+                        onBlur={() => void chercherExistant(form.codeBarre).then(setExistant)}
+                        readOnly={ro}
+                        required
+                        inputMode="numeric"
+                        // Douchette (ordinateur) : le code arrive tapé, suivi d'Entrée.
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void ouvrirSiExistant(form.codeBarre);
+                          }
+                        }}
+                        suffix={
+                          scanCameraDisponible() ? (
+                            <IconButton icon={scanOutline} label={t("Scanner le code-barres")} onClick={handleScanBarcode} disabled={scanning} />
+                          ) : undefined
+                        }
+                      />
+                      {(refUtilisee || form.code) && (
+                        <Field label={t("Réf")} hint={ro ? undefined : t("Facultative")} value={form.code} onChange={(v) => update("code", v)} readOnly={ro} autoCapitalize="characters" />
+                      )}
+                      <Field label={t("Désignation")} value={form.designation} onChange={(v) => update("designation", v)} readOnly={ro} required />
+                      {/* Catégorie facultative (création rapide) : un article sans catégorie est signalé « à classer » dans le dépôt. */}
+                      {ro ? (
+                        form.categorieId && <Field label={t("Catégorie")} value={chemin(categories, form.categorieId)} readOnly />
+                      ) : (
+                        categories.length > 0 && (
+                          <PickerField
+                            label={t("Catégorie")}
+                            value={form.categorieId ? chemin(categories, form.categorieId) : undefined}
+                            placeholder={t("Aucune : à classer plus tard")}
+                            onOpen={() => setCategorieOuverte(true)}
+                          />
+                        )
+                      )}
+                      <div className="rc-fields__row">
+                        <Field label={t("Marque")} value={form.marque} onChange={(v) => update("marque", v)} readOnly={ro} />
+                        <Field label={t("Unité")} placeholder={t("ex : 160 ML")} value={form.unit} onChange={(v) => update("unit", v)} readOnly={ro} />
+                      </div>
+                    </div>
+                  </Group>
+                </Section>
 
-            {canEdit && !isNew && <ArticleHistoriquePrix articleId={id!} />}
+                </>
+              )}
 
-            {canEdit && !isNew && <ArticleMouvements articleId={id!} />}
+              {onglet === "tarifs" && (
+                <>
+                <Section label={t("Tarifs et conditionnement")}>
+                  <Group pad>
+                    <div className="rc-fields">
+                      {/* Prix d'achat et marge : réservés à l'admin (le serveur ne les envoie pas aux vendeurs). */}
+                      {canEdit && (
+                        <div className="rc-fields__row">
+                          <Field
+                            label={t("Prix d'achat HT")}
+                            type="number"
+                            inputMode="decimal"
+                            value={form.prixAchat}
+                            onChange={surAchat}
+                            suffix="TND"
+                          />
+                          <Field
+                            label={t("Marge")}
+                            type="number"
+                            inputMode="decimal"
+                            value={prix.marge}
+                            onChange={surMarge}
+                            suffix="%"
+                            hint={form.prixAchat > 0 ? t("Sur le prix d'achat") : t("Renseignez le prix d'achat")}
+                          />
+                        </div>
+                      )}
+                      <div className="rc-fields__row">
+                        <Field
+                          label={t("Prix de vente TTC")}
+                          type="number"
+                          inputMode="decimal"
+                          value={ro ? formatAmount(ttcDepuisHT(form.prixVente, form.tva, form.fodec)) : prix.ttc}
+                          onChange={surTTC}
+                          readOnly={ro}
+                          staticSuffix="TND"
+                          suffix="TND"
+                        />
+                        <Field
+                          label={t("Prix de vente HT")}
+                          type="number"
+                          inputMode="decimal"
+                          value={ro ? formatAmount(form.prixVente) : prix.ht}
+                          onChange={surHT}
+                          readOnly={ro}
+                          staticSuffix="TND"
+                          suffix="TND"
+                        />
+                      </div>
+                      <div className="rc-fields__row">
+                        <Field
+                          label={t("Colisage")}
+                          type="number"
+                          inputMode="numeric"
+                          value={form.colisage}
+                          onChange={(v) => {
+                            // Le stock minimum est saisi en colis : il suit le nouveau colisage.
+                            const nouveau = num(v, 0);
+                            if (form.stockMini != null && nouveau > 0) update("stockMini", (form.stockMini / colisMini) * nouveau);
+                            update("colisage", nouveau);
+                          }}
+                          readOnly={ro}
+                          hint={ro ? undefined : t("Pièces par colis")}
+                        />
+                        <Field
+                          label={t("TVA")}
+                          type="number"
+                          inputMode="decimal"
+                          value={form.tva}
+                          onChange={surTva}
+                          readOnly={ro}
+                          staticSuffix="%"
+                          suffix="%"
+                        />
+                      </div>
+                      {canEdit && (
+                        <div className="rc-fields__row">
+                          <Field
+                            label={t("FODEC")}
+                            type="number"
+                            inputMode="decimal"
+                            value={form.fodec}
+                            onChange={surFodec}
+                            suffix="%"
+                            hint={t("1 % du prix HT, sinon 0")}
+                          />
+                          <Field
+                            label={t("Prix de gros TTC")}
+                            type="number"
+                            inputMode="decimal"
+                            value={prix.gros}
+                            onChange={surGros}
+                            suffix="TND"
+                            hint={t("Facultatif")}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </Group>
+                </Section>
 
-            {canEdit && !isNew && !web && (
+                </>
+              )}
+
+              {onglet === "codes" && (
+                <>
+                <CodesBarresAlternatifs
+                  value={form.codesBarres ?? []}
+                  onChange={(codes) => update("codesBarres", codes)}
+                  readOnly={ro}
+                  codePrincipal={form.codeBarre}
+                />
+
+                </>
+              )}
+
+              {onglet === "stock" && canEdit && (
+                <div className="rc-span">
+                  {/* Une seule colonne : chiffres clés (dépôt, camions, stock minimum) puis le tableau des dates. */}
+                  {isNew ? (
+                    <Section label={t("Alertes de stock")}>
+                      <Group pad>
+                        <Field
+                      label={t("Stock minimum")}
+                      type="number"
+                      inputMode="decimal"
+                      value={form.stockMini == null ? "" : Math.round((form.stockMini / colisMini) * 100) / 100}
+                      placeholder={t("{n} (par défaut)", { n: STOCK_MINI_COLIS })}
+                      suffix={t("colis")}
+                      onChange={(v) => update("stockMini", v.trim() === "" ? null : Math.max(0, Number(v.replace(",", ".")) * colisMini) || null)}
+                      hint={
+                        form.stockMini == null
+                          ? t("Par défaut {n} colis = {p} pièces. En dessous : orange sur le plan 3D.", { n: STOCK_MINI_COLIS, p: STOCK_MINI_COLIS * colisMini })
+                          : t("= {p} pièces. En dessous : orange sur le plan 3D.", { p: Math.round(form.stockMini * 1000) / 1000 })
+                      }
+                    />
+                      </Group>
+                    </Section>
+                  ) : (
+                    <ArticleStockLots
+                      articleId={id!}
+                      stockMini={
+                        <Field
+                      label={t("Stock minimum")}
+                      type="number"
+                      inputMode="decimal"
+                      value={form.stockMini == null ? "" : Math.round((form.stockMini / colisMini) * 100) / 100}
+                      placeholder={t("{n} (par défaut)", { n: STOCK_MINI_COLIS })}
+                      suffix={t("colis")}
+                      onChange={(v) => update("stockMini", v.trim() === "" ? null : Math.max(0, Number(v.replace(",", ".")) * colisMini) || null)}
+                      hint={
+                        form.stockMini == null
+                          ? t("Par défaut {n} colis = {p} pièces. En dessous : orange sur le plan 3D.", { n: STOCK_MINI_COLIS, p: STOCK_MINI_COLIS * colisMini })
+                          : t("= {p} pièces. En dessous : orange sur le plan 3D.", { p: Math.round(form.stockMini * 1000) / 1000 })
+                      }
+                    />
+                      }
+                    />
+                  )}
+                </div>
+              )}
+
+              {onglet === "prix" && canEdit && !isNew && (
+                <div className="rc-span">
+                  <ArticleHistoriquePrix articleId={id!} />
+                </div>
+              )}
+
+              {onglet === "fournisseurs" && canEdit && !isNew && (
+                <div className="rc-span">
+                  <ArticleFournisseurs articleId={id!} colisage={colisMini} />
+                </div>
+              )}
+
+              {onglet === "mouvements" && canEdit && !isNew && (
+                <div className="rc-span">
+                  <ArticleMouvements articleId={id!} />
+                </div>
+              )}
+
+            {onglet === "fiche" && canEdit && !isNew && !web && (
               <Section className="rc-span">
                 <Button variant="danger" block icon={trashOutline} onClick={() => setConfirmDelete(true)} disabled={saving}>
                   {t("Supprimer l'article")}
                 </Button>
               </Section>
             )}
-          </div>
+            </div>
+          </>
         )}
 
         <IonAlert

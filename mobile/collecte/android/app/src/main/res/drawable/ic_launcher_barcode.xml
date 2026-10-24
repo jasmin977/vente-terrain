@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône de Collecte : un code-barres blanc et la ligne rouge du scanner. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M32.00,38h1.49v30h-1.49zM34.24,38h0.75v30h-0.75zM35.73,38h0.75v30h-0.75zM37.97,38h1.49v30h-1.49zM40.20,38h2.24v30h-2.24zM43.19,38h0.75v30h-0.75zM44.68,38h0.75v30h-0.75zM46.92,38h0.75v30h-0.75zM48.41,38h1.49v30h-1.49zM50.64,38h0.75v30h-0.75zM52.88,38h2.24v30h-2.24zM55.86,38h0.75v30h-0.75zM57.36,38h0.75v30h-0.75zM59.59,38h1.49v30h-1.49zM61.83,38h0.75v30h-0.75zM63.32,38h0.75v30h-0.75zM65.56,38h1.49v30h-1.49zM67.80,38h2.24v30h-2.24zM70.78,38h0.75v30h-0.75zM72.27,38h0.75v30h-0.75zM74.51,38h1.49v30h-1.49z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M30,32h8v2.2h-5.8v5.8h-2.2zM70,32h8v8h-2.2v-5.8h-5.8zM30,68h2.2v5.8h5.8v2.2h-8zM75.8,68h2.2v8h-8v-2.2h5.8z"/>
+    <path android:fillColor="#FF4D4D" android:pathData="M28,52.6h52v2.8h-52z"/>
+</vector>

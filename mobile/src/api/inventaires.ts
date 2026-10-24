@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { Inventaire, InventaireResume, LigneInventaireInput } from "../types/inventaire";
+import type { Inventaire, InventaireResume, LigneInventaireInput, SuiviCategorie } from "../types/inventaire";
 
 /** Valeur désignant le dépôt dans une cible d'inventaire (sinon : id du vendeur du camion). */
 export const DEPOT = "depot";
@@ -16,8 +16,9 @@ export function getInventaire(id: string): Promise<Inventaire> {
 }
 
 /** Ouvre un inventaire pour ce camion (ou pour le dépôt), ou reprend celui déjà en cours. */
-export function ouvrirInventaire(cible: string): Promise<{ id: string }> {
-  const body = cible === DEPOT ? { lieu: "DEPOT" } : { vendeurId: cible };
+/** Dépôt : `categorieIds` = catégories à inventorier (avec leurs sous-catégories) ; vide = tout le dépôt. */
+export function ouvrirInventaire(cible: string, categorieIds: string[] = []): Promise<{ id: string }> {
+  const body = cible === DEPOT ? { lieu: "DEPOT", categorieIds } : { vendeurId: cible };
   return apiRequest<{ id: string }>("/inventaires", { method: "POST", body });
 }
 
@@ -35,4 +36,9 @@ export function validerInventaire(id: string): Promise<Inventaire> {
 
 export function abandonnerInventaire(id: string) {
   return apiRequest<void>(`/inventaires/${id}`, { method: "DELETE" });
+}
+
+/** Dépôt : chaque catégorie avec la date de son dernier inventaire terminé (inventaire tournant). */
+export function getSuiviCategories(): Promise<SuiviCategorie[]> {
+  return apiRequest<SuiviCategorie[]>("/inventaires/suivi-categories");
 }

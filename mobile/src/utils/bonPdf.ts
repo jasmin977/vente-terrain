@@ -1,11 +1,17 @@
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import type { RowInput } from "jspdf-autotable";
 import type { Article } from "../types/article";
 import type { Facture } from "../types/facture";
+import type { FactureVenteDetail } from "../api/factures";
 import { societeImprimee } from "./societe";
+import { formatDate } from "./format";
 import PdfPrinter from "../plugins/pdfPrinter";
 import { comparerCatalogue } from "./triArticles";
+import { construireFactureModele, type LigneModele } from "./facturePdf";
+import { modePaiementLabel } from "./labels";
+import type { AchatDetail } from "../types/achat";
 
 export type TypeBon = "ENTREE" | "SORTIE" | "RETOUR";
 
@@ -84,7 +90,7 @@ async function enregistrerPdf(doc: Awaited<ReturnType<typeof nouveauDocumentA4>>
  * Envoie le PDF à une imprimante classique : écran « Imprimer » d'Android
  * (imprimantes Wi-Fi, Mopria…). Dans un navigateur, boîte d'impression du navigateur.
  */
-async function imprimerPdf(doc: Awaited<ReturnType<typeof nouveauDocumentA4>>["doc"], nom: string) {
+async function imprimerPdf(doc: Awaited<ReturnType<typeof nouveauDocumentA4>>["doc"], nom: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     await PdfPrinter.print({ data: doc.output("datauristring").split(",")[1], name: nom });
     return;
@@ -93,14 +99,18 @@ async function imprimerPdf(doc: Awaited<ReturnType<typeof nouveauDocumentA4>>["d
   const cadre = document.createElement("iframe");
   cadre.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
   cadre.src = url;
-  cadre.onload = () => {
-    cadre.contentWindow?.print();
-    setTimeout(() => {
-      cadre.remove();
-      URL.revokeObjectURL(url);
-    }, 60_000);
-  };
-  document.body.appendChild(cadre);
+  // Résolu une fois la boîte d'impression passée : l'impression de plusieurs documents se fait l'un après l'autre.
+  await new Promise<void>((resolve) => {
+    cadre.onload = () => {
+      cadre.contentWindow?.print();
+      setTimeout(() => {
+        cadre.remove();
+        URL.revokeObjectURL(url);
+      }, 60_000);
+      resolve();
+    };
+    document.body.appendChild(cadre);
+  });
 }
 
 /** Construit le bon au format A4, comme le modèle papier de la société. */
@@ -121,7 +131,7 @@ export async function construireBonA4(bon: BonA4) {
     doc.text(valeur, marge + 42, y);
     y += 8;
   };
-  ligne("Date :", new Date(bon.date).toLocaleDateString("fr-FR"));
+  ligne("Date :", formatDate(bon.date));
   if (bon.vendeur) {
     ligne("Vendeur :", bon.vendeur.nom.toUpperCase());
     ligne("VOITURE :", bon.vendeur.voiture ?? "");
@@ -211,7 +221,7 @@ export async function construireBonLivraisonA4(f: Facture) {
   champ("Adresse :", [c?.adresse, c?.ville].filter(Boolean).join(", "), marge, y + 14);
   champ("Tél. :", c?.telephone, marge, y + 21);
   const droite = largeur / 2 + 10;
-  champ("Date :", new Date(f.date).toLocaleDateString("fr-FR"), droite, y);
+  champ("Date :", formatDate(f.date), droite, y);
   champ("Vendeur :", f.vendeur?.nom, droite, y + 7);
   y += 30;
 
@@ -288,4 +298,90 @@ export async function imprimerBonLivraisonImprimante(f: Facture): Promise<void> 
 export async function telechargerBonLivraisonA4(f: Facture): Promise<void> {
   const doc = await construireBonLivraisonA4(f);
   await enregistrerPdf(doc, `bon-livraison-${f.numero.replace(/[^\w-]+/g, "_")}.pdf`, "Enregistrer ou envoyer le bon de livraison");
+}
+
+/* ---------------------------------------------------------------- Facture (regroupement de bons de livraison) */
+
+/** Facture de vente au modèle de la société : les articles bon par bon (« BL n° … · date »), timbre, net à payer. */
+export async function construireFactureA4(f: FactureVenteDetail) {
+  const SOCIETE = societeImprimee();
+  const lignes: LigneModele[] = [];
+  for (const bon of f.bons) {
+    lignes.push({ titre: `BL n° ${bon.numero} · ${formatDate(bon.date)}` });
+    for (const l of [...bon.lignes].sort((x, y) => comparerCatalogue(x.article, y.article))) {
+      lignes.push({
+        codeBarre: l.article.codeBarre,
+        designation: designation(l.article),
+        quantite: Number(l.quantite),
+        tauxTva: Number(l.tauxTva),
+        prixHT: Number(l.prixUnitaire),
+        montantHT: Number(l.montantHT),
+        montantTTC: Number(l.montantTTC),
+      });
+    }
+  }
+  return construireFactureModele({
+    numero: f.numero,
+    date: f.date,
+    emetteur: SOCIETE,
+    destinataire: {
+      nom: f.client?.nomCommerce ?? "",
+      matriculeFiscal: f.client?.code,
+      adresse: [f.client?.adresse, f.client?.ville].filter(Boolean).join(", "),
+      telephone: f.client?.telephone,
+    },
+    lignes,
+    timbre: Number(f.timbre ?? 1),
+  });
+}
+
+/** Facture fournisseur au même modèle : le fournisseur en en-tête, la société comme client. */
+export async function construireFactureAchatA4(a: AchatDetail) {
+  const SOCIETE = societeImprimee();
+  const modes = [...new Set(a.reglements.map((r) => modePaiementLabel[r.mode]))].join(", ");
+  return construireFactureModele({
+    numero: a.numero,
+    date: a.date,
+    emetteur: {
+      nom: a.fournisseur.divers ? a.fournisseurLibre || "Divers" : a.fournisseur.nom,
+      adresse: [a.fournisseur.adresse, a.fournisseur.ville].filter(Boolean).join(", "),
+      telephone: a.fournisseur.telephone,
+      email: a.fournisseur.email,
+      matriculeFiscal: a.fournisseur.matriculeFiscal,
+    },
+    destinataire: { nom: SOCIETE.nom, matriculeFiscal: SOCIETE.matriculeFiscal, adresse: SOCIETE.adresse, telephone: SOCIETE.telephone },
+    lignes: a.lignes.map((l) => ({
+      codeBarre: l.article?.codeBarre,
+      designation: l.designation,
+      quantite: Number(l.quantite),
+      tauxTva: Number(l.tauxTva),
+      prixHT: Number(l.prixUnitaire),
+      montantHT: Number(l.montantHT),
+      montantTTC: Number(l.montantTTC),
+    })),
+    timbre: Number(a.timbre ?? 0),
+    modeReglement: modes,
+  });
+}
+
+const nomFichierAchat = (a: AchatDetail) => `facture-fournisseur-${a.numero.replace(/[^\w-]+/g, "_")}.pdf`;
+
+export async function telechargerFactureAchatA4(a: AchatDetail): Promise<void> {
+  await enregistrerPdf(await construireFactureAchatA4(a), nomFichierAchat(a), "Enregistrer ou envoyer la facture");
+}
+
+export async function imprimerFactureAchat(a: AchatDetail): Promise<void> {
+  await imprimerPdf(await construireFactureAchatA4(a), `facture-fournisseur-${a.numero}`);
+}
+
+const nomFichierFacture = (f: FactureVenteDetail) => `facture-${f.numero.replace(/[^\w-]+/g, "_")}.pdf`;
+
+/** Télécharge la facture en A4 (partage du téléphone ou téléchargement navigateur). */
+export async function telechargerFactureA4(f: FactureVenteDetail): Promise<void> {
+  await enregistrerPdf(await construireFactureA4(f), nomFichierFacture(f), "Enregistrer ou envoyer la facture");
+}
+
+/** Imprime la facture sur une imprimante A4 ; rend la main une fois la boîte d'impression passée. */
+export async function imprimerFactureImprimante(f: FactureVenteDetail): Promise<void> {
+  await imprimerPdf(await construireFactureA4(f), `facture-${f.numero}`);
 }

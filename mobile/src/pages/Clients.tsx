@@ -145,11 +145,11 @@ export default function Clients() {
   }, [credits, vendeurChoisi]);
 
   return (
-    <IonPage>
+    <IonPage className={web && vue === "credits" ? "rc-page--large rc-credits-page" : undefined}>
       <AppHeader
         large
         eyebrow={web && vue === "credits" ? t("Clients") : undefined}
-        title={web && vue === "credits" ? t("Crédits") : t("Clients")}
+        title={web && vue === "credits" ? t("Liste des crédits") : t("Liste des clients")}
         actions={<AccountButton />}
       >
         {!web && (
@@ -177,6 +177,12 @@ export default function Clients() {
               onOpen={() => setVendeurSheet(true)}
             />
           </div>
+        )}
+        {/* Web : « Ajouter une avance » sur la même ligne que la recherche et le filtre, à droite. */}
+        {web && vue === "credits" && credits.length > 0 && (
+          <Button className="rc-credits-avance" icon={cashOutline} onClick={() => setAvance({})}>
+            {t("Ajouter une avance")}
+          </Button>
         )}
       </AppHeader>
 
@@ -221,7 +227,7 @@ export default function Clients() {
                         key={client.id}
                         onClick={() => navigate(`/clients/${client.id}`)}
                         title={client.nomCommerce}
-                        meta={joinMeta([client.code, client.ville, client.enAttente ? t("En attente d'envoi") : null])}
+                        meta={joinMeta([client.ref ? `N° ${client.ref}` : null, client.code, client.ville, client.enAttente ? t("En attente d'envoi") : null])}
                         trailing={
                           client.solde > 0 ? (
                             <Money value={client.solde} tone="warning" />
@@ -242,7 +248,7 @@ export default function Clients() {
         )}
       </IonContent>
 
-      {vue === "credits" && credits.length > 0 && (
+      {!web && vue === "credits" && credits.length > 0 && (
         <ActionBar aboveTabs>
           <Button size="lg" block icon={cashOutline} onClick={() => setAvance({})}>
             {t("Ajouter une avance")}

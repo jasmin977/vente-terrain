@@ -4,6 +4,7 @@ import { Network } from "@capacitor/network";
 import { ApiError, apiRequest, estErreurReseau } from "../api/client";
 import type { Article } from "../types/article";
 import type { Categorie } from "../types/categorie";
+import type { Promotion } from "../types/promotion";
 import type { Client } from "../types/client";
 import type { CreditClient } from "../types/credit";
 import type { Facture } from "../types/facture";
@@ -71,15 +72,17 @@ function envoyer(a: ActionEnAttente): Promise<unknown> {
 /** Recharge les données de référence du vendeur (après l'envoi de ses actions). */
 export async function rafraichirDonnees(): Promise<boolean> {
   const lecture = { timeoutMs: DELAI_LECTURE };
-  const [articles, clients, credits, factures, numero, categories] = await Promise.allSettled([
+  const [articles, clients, credits, factures, numero, categories, promotions] = await Promise.allSettled([
     apiRequest<Article[]>("/articles", lecture),
     apiRequest<Client[]>("/clients", lecture),
     apiRequest<CreditClient[]>("/credits", lecture),
     apiRequest<Facture[]>("/factures", lecture),
     apiRequest<{ numero: string }>("/factures/numero-suivant", lecture),
     apiRequest<Categorie[]>("/categories", lecture),
+    apiRequest<Promotion[]>("/promotions/actives", lecture),
   ]);
   if (categories.status === "fulfilled") await ecrireCache("categories", categories.value);
+  if (promotions.status === "fulfilled") await ecrireCache("promotions", promotions.value);
   if (articles.status === "fulfilled") await ecrireCache("articles", articles.value);
   if (clients.status === "fulfilled") await ecrireCache("clients", clients.value);
   if (credits.status === "fulfilled") await ecrireCache("credits", credits.value);

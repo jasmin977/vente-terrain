@@ -1,0 +1,39 @@
+{
+  "name": "caisse",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Caisse du supermarché : vente au comptoir hors ligne, synchronisée avec le serveur VenteTerrain.",
+  "author": "VenteTerrain",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "electron": "cross-env CAISSE_DEV_URL=http://localhost:5180 electron .",
+    "build": "tsc --noEmit -p . && vite build --config vite.config.ts",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder --win --x64"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.0.4",
+    "@vitejs/plugin-react": "6.1.1",
+    "cross-env": "7.0.3",
+    "electron": "44.5.1",
+    "electron-builder": "26.16.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
+  },
+  "build": {
+    "appId": "tn.venteterrain.caisse",
+    "productName": "Caisse",
+    "directories": { "output": "release" },
+    "files": ["dist/**", "electron/**", "package.json"],
+    "win": { "icon": "build/icon.ico", "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": { "oneClick": false, "perMachine": true, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "shortcutName": "Caisse" }
+  }
+}

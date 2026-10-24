@@ -7,6 +7,7 @@ import EspaceSociete from './societe/EspaceSociete';
 import { SocieteProvider, useSociete } from './societe/SocieteContext';
 import { AuthProvider } from './auth/AuthContext';
 import PrivateRoute from './auth/PrivateRoute';
+import VeilleEcran from './components/VeilleEcran';
 import { getLang, onLangChange } from './i18n';
 
 /* Core CSS required for Ionic components to work properly */
@@ -52,6 +53,7 @@ import './theme/variables.css';
 import './theme/global.css';
 import './theme/components.css';
 import './theme/web.css';
+import './theme/veille.css';
 
 setupIonicReact();
 
@@ -98,6 +100,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <SocieteProvider>
       <Routeur lang={lang} />
+      <VeilleEcran />
       </SocieteProvider>
     </AuthProvider>
   </IonApp>

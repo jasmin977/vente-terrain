@@ -40,6 +40,10 @@ export interface InventaireResume {
   lieu: LieuInventaire;
   admin: Personne;
   statut: StatutInventaire;
+  /** Dépôt : catégories inventoriées (vide = tout le dépôt). */
+  categorieIds?: string[];
+  /** « Boissons › Eaux », « Tout le dépôt ». */
+  libelle?: string | null;
   note?: string | null;
   createdAt: string;
   dateValidation?: string | null;
@@ -54,4 +58,19 @@ export interface LigneInventaireInput {
   quantiteReelle: number;
   motif?: MotifEcart | null;
   note?: string | null;
+}
+
+/** Suivi d'une catégorie pour l'inventaire tournant du dépôt. */
+export interface SuiviCategorie {
+  id: string;
+  nom: string;
+  /** « Boissons › Eaux ». */
+  chemin: string;
+  parentId: string | null;
+  nbArticles: number;
+  dernierInventaire: { id: string; date: string; libelle: string | null } | null;
+  /** Jours depuis le dernier inventaire terminé ; null : jamais. */
+  joursDepuis: number | null;
+  /** principal : lancé sur cette catégorie ; sinon elle est incluse dans l'inventaire d'une catégorie parente (ou du dépôt). */
+  enCours: { id: string; libelle: string | null; principal?: boolean } | null;
 }

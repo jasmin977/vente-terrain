@@ -1,0 +1,249 @@
+/* ---------- Écran de veille : entrepôt en 3D ---------- */
+.rc-veille {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  overflow: hidden;
+  background: linear-gradient(160deg, #0f1c2e, #1d2b4a 55%, #2a2350);
+  animation: rc-veille-entree 1.2s ease backwards;
+}
+
+@keyframes rc-veille-entree {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.rc-veille__orbe {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.35;
+  will-change: transform;
+}
+
+.rc-veille__orbe--1 {
+  width: 46vmax;
+  height: 46vmax;
+  left: -10vmax;
+  top: -12vmax;
+  background: #4f8fd6;
+  animation: rc-veille-derive-1 22s ease-in-out infinite alternate;
+}
+
+.rc-veille__orbe--2 {
+  width: 40vmax;
+  height: 40vmax;
+  right: -8vmax;
+  bottom: -10vmax;
+  background: #8a63d2;
+  animation: rc-veille-derive-2 28s ease-in-out infinite alternate;
+}
+
+@keyframes rc-veille-derive-1 {
+  to { transform: translate(24vmax, 18vmax) scale(1.15); }
+}
+
+@keyframes rc-veille-derive-2 {
+  to { transform: translate(-26vmax, -14vmax) scale(1.2); }
+}
+
+/* Scène : l'unité est l'em (≈ 1 % de la largeur de l'écran). */
+.rc-veille__scene {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  font-size: min(1.05vw, 1.9vh);
+  perspective: 170em;
+}
+
+.rc-veille__plan {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(58deg) rotateZ(-38deg) translate3d(-40em, -30em, 0);
+  animation: rc-veille-camera 48s ease-in-out infinite alternate;
+}
+
+@keyframes rc-veille-camera {
+  from { transform: rotateX(58deg) rotateZ(-33deg) translate3d(-40em, -30em, 0); }
+  to { transform: rotateX(55deg) rotateZ(-44deg) translate3d(-40em, -30em, 0); }
+}
+
+.rc-veille__sol,
+.rc-veille__route {
+  position: absolute;
+  translate: 0 0 -0.1em;
+}
+
+.rc-veille__sol {
+  left: -90em;
+  top: -30em;
+  width: 260em;
+  height: 120em;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 8em),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 8em),
+    #1f2c40;
+}
+
+.rc-veille__route {
+  left: -90em;
+  top: 33em;
+  width: 260em;
+  height: 13em;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 6em, transparent 6em 12em) center / 100% 0.35em no-repeat,
+    #2c384e;
+}
+
+/* Boîte : le dessus et quatre côtés, ombrés pour donner le volume. */
+.rc-veille__boite,
+.rc-veille__lot,
+.rc-veille__camion,
+.rc-veille__camion-corps,
+.rc-veille__pile {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+.rc-veille__f {
+  position: absolute;
+  display: block;
+  background-color: var(--c);
+  backface-visibility: visible;
+}
+
+.rc-veille__f--haut {
+  inset: 0;
+  transform: translateZ(var(--h));
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+}
+
+.rc-veille__f--av,
+.rc-veille__f--ar {
+  left: 0;
+  width: var(--w);
+  height: var(--h);
+  transform-origin: 50% 100%;
+  transform: rotateX(-90deg);
+  background-image: linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.22));
+}
+
+.rc-veille__f--av { top: calc(var(--d) - var(--h)); }
+.rc-veille__f--ar { top: calc(var(--h) * -1); }
+
+.rc-veille__f--g,
+.rc-veille__f--d {
+  top: calc(var(--h) * -1);
+  width: var(--d);
+  height: var(--h);
+  transform-origin: 0 100%;
+  transform: rotateZ(90deg) rotateX(-90deg);
+  background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4));
+}
+
+.rc-veille__f--g { left: 0; }
+.rc-veille__f--d { left: var(--w); }
+
+/* Quais : un volet roulant qui se lève pendant qu'un camion est à quai. */
+.rc-veille__porte {
+  position: absolute;
+  bottom: 0;
+  height: 9em;
+  background: #1b2638;
+  overflow: hidden;
+}
+
+.rc-veille__volet {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 0;
+  background: repeating-linear-gradient(180deg, #7d8fa8 0 0.5em, #6d7f98 0.5em 1em);
+  animation: rc-veille-volet 30s ease-in-out infinite;
+}
+
+.rc-veille__volet--2 { animation-delay: -15s; }
+
+@keyframes rc-veille-volet {
+  0%, 8% { transform: scaleY(1); }
+  14%, 40% { transform: scaleY(0.12); }
+  46%, 100% { transform: scaleY(1); }
+}
+
+/* Camions : A roule vers la droite, B (en miroir) vers la gauche, en alternance. */
+.rc-veille__camion { top: 36em; left: 0; }
+.rc-veille__camion--a { animation: rc-veille-camion-a 30s infinite; }
+.rc-veille__camion--b { animation: rc-veille-camion-b 30s infinite -15s; }
+.rc-veille__camion--b .rc-veille__camion-corps { transform: scaleX(-1); }
+
+@keyframes rc-veille-camion-a {
+  0% { transform: translate3d(-45em, 0, 0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1); }
+  12% { transform: translate3d(14em, 0, 0); }
+  38% { transform: translate3d(14em, 0, 0); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+  50%, 100% { transform: translate3d(135em, 0, 0); }
+}
+
+@keyframes rc-veille-camion-b {
+  0% { transform: translate3d(155em, 0, 0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1); }
+  12% { transform: translate3d(66em, 0, 0); }
+  38% { transform: translate3d(66em, 0, 0); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+  50%, 100% { transform: translate3d(-45em, 0, 0); }
+}
+
+/* Les cartons glissent dans le bâtiment à taille réelle : le mur les cache. Ni opacité ni échelle
+   (elles aplatissent la 3D) ; seulement `visibility` pour les masquer hors de la scène. */
+.rc-veille__lot--a1 { animation: rc-veille-sort-1 30s infinite; }
+.rc-veille__lot--a2 { animation: rc-veille-sort-2 30s infinite; }
+.rc-veille__lot--a3 { animation: rc-veille-sort-3 30s infinite; }
+.rc-veille__lot--b1 { animation: rc-veille-entre-1 30s infinite -15s; }
+.rc-veille__lot--b2 { animation: rc-veille-entre-2 30s infinite -15s; }
+.rc-veille__lot--b3 { animation: rc-veille-entre-3 30s infinite -15s; }
+
+@keyframes rc-veille-sort-1 {
+  0%, 16% { transform: none; visibility: visible; animation-timing-function: ease-in-out; }
+  21% { transform: translate3d(0, -16em, 0); visibility: visible; }
+  21.1%, 92% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  92.1%, 100% { transform: none; visibility: visible; }
+}
+@keyframes rc-veille-sort-2 {
+  0%, 22% { transform: none; visibility: visible; animation-timing-function: ease-in-out; }
+  27% { transform: translate3d(0, -16em, 0); visibility: visible; }
+  27.1%, 92% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  92.1%, 100% { transform: none; visibility: visible; }
+}
+@keyframes rc-veille-sort-3 {
+  0%, 28% { transform: none; visibility: visible; animation-timing-function: ease-in-out; }
+  33% { transform: translate3d(0, -16em, 0); visibility: visible; }
+  33.1%, 92% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  92.1%, 100% { transform: none; visibility: visible; }
+}
+
+@keyframes rc-veille-entre-1 {
+  0%, 16% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  16.1% { transform: translate3d(0, -16em, 0); visibility: visible; animation-timing-function: ease-in-out; }
+  21%, 56% { transform: none; visibility: visible; }
+  56.1%, 100% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+}
+@keyframes rc-veille-entre-2 {
+  0%, 22% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  22.1% { transform: translate3d(0, -16em, 0); visibility: visible; animation-timing-function: ease-in-out; }
+  27%, 56% { transform: none; visibility: visible; }
+  56.1%, 100% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+}
+@keyframes rc-veille-entre-3 {
+  0%, 28% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+  28.1% { transform: translate3d(0, -16em, 0); visibility: visible; animation-timing-function: ease-in-out; }
+  33%, 56% { transform: none; visibility: visible; }
+  56.1%, 100% { transform: translate3d(0, -16em, 0); visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-veille *,
+  .rc-veille *::before,
+  .rc-veille *::after {
+    animation: none !important;
+  }
+}

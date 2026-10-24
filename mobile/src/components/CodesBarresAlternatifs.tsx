@@ -51,8 +51,14 @@ export default function CodesBarresAlternatifs({
   };
 
   return (
-    <Section label={t("Autres codes-barres (variantes)")}>
-      {value.length > 0 && (
+    <Section label={t("Autres codes-barres (variantes)")} aside={value.length > 0 ? `${value.length}` : undefined}>
+      {/* Deux colonnes au PC : les codes de l'article à gauche, l'ajout d'un code à droite. */}
+      <div className="rc-codes">
+      {value.length === 0 ? (
+        <Group pad>
+          <p className="rc-footnote rc-codes__vide">{t("Aucun autre code-barres : seul le code principal ({c}) ramène cet article.", { c: codePrincipal || "—" })}</p>
+        </Group>
+      ) : (
         <Group>
           {value.map((v) => (
             <Row
@@ -94,6 +100,7 @@ export default function CodesBarresAlternatifs({
           </div>
         </Group>
       )}
+      </div>
     </Section>
   );
 }

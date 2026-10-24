@@ -1,3 +1,4 @@
+import type { Article } from "../types/article";
 import { apiRequest } from "./client";
 import type { Peremption } from "../types/lot";
 import type {
@@ -51,6 +52,26 @@ export function confirmerSansStock(articleIds: string[]): Promise<{ confirmes: n
 /** Lots expirés ou proches de l'expiration, et articles périssables à dater. */
 export function getPeremption(): Promise<Peremption> {
   return apiRequest<Peremption>("/stock/depot/peremption");
+}
+
+/** Fiche article : stock du dépôt par date d'expiration (avec la provenance de chaque date) et stock des camions. */
+export interface LotsArticle {
+  article: Article;
+  depot: number;
+  perissable: boolean;
+  alerteJours: number | null;
+  lots: {
+    dateExpiration: string | null;
+    quantite: number;
+    joursRestants: number | null;
+    statut: "EXPIRE" | "PROCHE" | "OK" | "SANS_DATE";
+    provenance: { type: "BL" | "FACTURE" | "ENTREE"; numero: string; date: string; fournisseur: string | null } | null;
+  }[];
+  camions: { vendeurId: string; vendeur: string; quantite: number }[];
+}
+
+export function getLotsArticle(articleId: string): Promise<LotsArticle> {
+  return apiRequest<LotsArticle>(`/stock/depot/lots/${articleId}`);
 }
 
 /** Donne une date d'expiration à des pièces du dépôt qui n'en ont pas. */

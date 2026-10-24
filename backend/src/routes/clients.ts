@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { creerClientAvecRef } from "../services/clientRef";
 import { requireAuth, requireSociete } from "../middleware/auth";
 import { calculerSolde, reglementsFactures, situationsClients } from "../services/creditService";
 
@@ -20,6 +21,7 @@ clientsRouter.get("/", async (req, res) => {
         ? {
             OR: [
               { code: { contains: q, mode: "insensitive" } },
+              ...(/^\d+$/.test(q) && q.length < 9 ? [{ ref: Number(q) }] : []),
               { nomCommerce: { contains: q, mode: "insensitive" } },
               { ville: { contains: q, mode: "insensitive" } },
             ],
@@ -107,7 +109,7 @@ clientsRouter.post("/", async (req, res) => {
       const existant = await prisma.client.findFirst({ where: { id: parsed.data.id, societeId: req.societeId } });
       if (existant) return res.status(200).json(existant);
     }
-    const client = await prisma.client.create({ data: { ...parsed.data, societeId: req.societeId! } });
+    const client = await creerClientAvecRef({ ...parsed.data, societeId: req.societeId! });
     res.status(201).json(client);
   } catch (err) {
     erreurUnicite(res, err);

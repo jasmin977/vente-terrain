@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAdmin, requireAuth, requireSociete } from "../middleware/auth";
 import { situationsSociete } from "../services/creditService";
+import { netAPayer, payesParAchat, situation, soldesFournisseurs } from "../services/achatService";
 
 // Tableau de bord de l'admin : chiffre d'affaires, encaissements, crédits,
 // vendeurs, top clients / produits, valeur du stock et marge, sur une période
@@ -70,13 +71,47 @@ function graduations(periode: Periode, debut: Date) {
   });
 }
 
+/**
+ * Période libre (?debut=…&fin=…, choisie au PC) : comparée à la même durée juste avant.
+ * Graphique par heure (un jour), par jour (jusqu'à 3 mois) ou par mois (au-delà).
+ */
+function bornesPlage(debutTexte: string, finTexte: string) {
+  const debut = new Date(debutTexte);
+  const fin = new Date(finTexte);
+  const duree = Math.max(0, fin.getTime() - debut.getTime());
+  const precedentFin = new Date(debut.getTime() - 1);
+  const precedentDebut = new Date(precedentFin.getTime() - duree);
+  const nbJours = Math.round((new Date(fin).setHours(0, 0, 0, 0) - new Date(debut).setHours(0, 0, 0, 0)) / JOUR_MS) + 1;
+  const pas: "heure" | "jour" | "mois" = nbJours <= 1 ? "heure" : nbJours <= 92 ? "jour" : "mois";
+  return { debut, fin, precedentDebut, precedentFin, pas, nbJours };
+}
+
+function graduationsPlage(pas: "heure" | "jour" | "mois", debut: Date, fin: Date) {
+  if (pas === "heure") return graduations("jour", debut);
+  if (pas === "jour") {
+    const res = [];
+    for (const d = new Date(new Date(debut).setHours(0, 0, 0, 0)); d <= fin; d.setDate(d.getDate() + 1)) {
+      res.push({ cle: String(res.length), debut: new Date(d), libelle: String(d.getDate()) });
+    }
+    return res;
+  }
+  const res = [];
+  for (const d = new Date(debut.getFullYear(), debut.getMonth(), 1); d <= fin; d.setMonth(d.getMonth() + 1)) {
+    res.push({ cle: String(res.length), debut: new Date(d), libelle: String(d.getMonth() + 1) });
+  }
+  return res;
+}
+
 tableauDeBordRouter.get("/", async (req, res) => {
   try {
     const periode: Periode = (["jour", "semaine", "mois"] as const).includes(req.query.periode as Periode)
       ? (req.query.periode as Periode)
       : "mois";
     const ref = reference(periode, req.query.mois);
-    const { debut, fin, precedentDebut, precedentFin } = bornes(periode, ref.instant, ref.complete);
+    const plage = typeof req.query.debut === "string" && typeof req.query.fin === "string" ? bornesPlage(req.query.debut, req.query.fin) : null;
+    const { debut, fin, precedentDebut, precedentFin } = plage ?? bornes(periode, ref.instant, ref.complete);
+    // Pas du graphique : heure, jour ou mois.
+    const pas: "heure" | "jour" | "mois" = plage ? plage.pas : periode === "jour" ? "heure" : "jour";
     // Bons de livraison validés des clients de la société.
     const societeId = req.societeId!;
     const validees = { statut: "VALIDEE" as const, deletedAt: null, client: { societeId } };
@@ -131,13 +166,16 @@ tableauDeBordRouter.get("/", async (req, res) => {
     const caPrecedent = arrondi(Number(precedentes._sum.montantTTC ?? 0));
     const evolution = caPrecedent > 0 ? Math.round(((ca - caPrecedent) / caPrecedent) * 1000) / 10 : null;
 
-    const grad = graduations(periode, debut);
+    const grad = plage ? graduationsPlage(plage.pas, debut, fin) : graduations(periode, debut);
     const serie = grad.map((g) => ({ libelle: g.libelle, debut: g.debut, montant: 0 }));
     for (const f of factures) {
+      const df = new Date(f.date);
       const i =
-        periode === "jour"
-          ? new Date(f.date).getHours()
-          : Math.floor((new Date(f.date).setHours(0, 0, 0, 0) - debut.getTime()) / JOUR_MS);
+        pas === "heure"
+          ? df.getHours()
+          : pas === "mois"
+            ? (df.getFullYear() - debut.getFullYear()) * 12 + df.getMonth() - debut.getMonth()
+            : Math.floor((new Date(df).setHours(0, 0, 0, 0) - new Date(debut).setHours(0, 0, 0, 0)) / JOUR_MS);
       if (serie[i]) serie[i].montant = arrondi(serie[i].montant + Number(f.montantTTC));
     }
 
@@ -221,12 +259,71 @@ tableauDeBordRouter.get("/", async (req, res) => {
     });
     const totalDu = arrondi(debiteurs.reduce((s, d) => s + d.totalDu, 0));
 
+    // ---- Factures de vente, achats, fournisseurs, dépenses (sur la même période)
+    const periodeDates = { gte: debut, lte: fin };
+    const precedenteDates = { gte: precedentDebut, lte: precedentFin };
+    // Trésorerie : une traite fournisseur sort de la banque à son échéance, pas le jour où elle est remise.
+    const aujourdhui = new Date();
+    const finEchue = fin < aujourdhui ? fin : aujourdhui;
+    const [facturesVente, blAFacturer, achats, achatsPrecedents, reglementsF, depenses, depensesPrecedentes, soldes, fournisseurs, traitesEchues, traitesAVenir] = await Promise.all([
+      prisma.factureVente.findMany({ where: { societeId, date: periodeDates }, select: { montantTTC: true, timbre: true } }),
+      // BL de vente validés pas encore transformés en facture (jusqu'à la fin de la période).
+      prisma.facture.aggregate({ where: { ...validees, factureVenteId: null, date: { lte: fin } }, _sum: { montantTTC: true }, _count: true }),
+      // Achats : factures fournisseurs + BL pas encore regroupés dans une facture (un BL facturé compte dans sa facture).
+      prisma.achat.findMany({ where: { societeId, deletedAt: null, factureId: null, date: periodeDates }, select: { type: true, montantTTC: true, timbre: true } }),
+      prisma.achat.findMany({ where: { societeId, deletedAt: null, factureId: null, date: precedenteDates }, select: { montantTTC: true, timbre: true } }),
+      prisma.reglementFournisseur.findMany({ where: { societeId, deletedAt: null, date: periodeDates }, select: { montant: true, mode: true } }),
+      prisma.depense.findMany({ where: { societeId, deletedAt: null, date: periodeDates }, select: { montant: true, categorie: { select: { id: true, nom: true } } } }),
+      prisma.depense.aggregate({ where: { societeId, deletedAt: null, date: precedenteDates }, _sum: { montant: true } }),
+      soldesFournisseurs(societeId),
+      prisma.fournisseur.findMany({ where: { societeId, deletedAt: null }, select: { id: true, nom: true, ref: true, divers: true } }),
+      // Traites arrivées à échéance dans la période (et déjà passées) : l'argent est sorti.
+      prisma.reglementFournisseur.aggregate({
+        where: { societeId, deletedAt: null, mode: "TRAITE", echeance: { gte: debut, lte: finEchue } },
+        _sum: { montant: true },
+      }),
+      // Traites remises, pas encore échues : sortiront plus tard.
+      prisma.reglementFournisseur.aggregate({
+        where: { societeId, deletedAt: null, mode: "TRAITE", echeance: { gt: aujourdhui } },
+        _sum: { montant: true },
+        _count: true,
+      }),
+    ]);
+    const evol = (actuel: number, avant: number) => (avant > 0 ? Math.round(((actuel - avant) / avant) * 1000) / 10 : null);
+
+    const totalAchats = arrondi(achats.reduce((s, a) => s + netAPayer(a), 0));
+    const totalAchatsPrecedent = arrondi(achatsPrecedents.reduce((s, a) => s + netAPayer(a), 0));
+    const blAchats = achats.filter((a) => a.type === "BL");
+    const facturesAchats = achats.filter((a) => a.type === "FACTURE");
+    const entreesAchats = achats.filter((a) => a.type === "ENTREE");
+
+    const regleParMode: Record<string, number> = {};
+    for (const r of reglementsF) regleParMode[r.mode] = arrondi((regleParMode[r.mode] ?? 0) + Number(r.montant));
+    const totalRegle = arrondi(reglementsF.reduce((s, r) => s + Number(r.montant), 0));
+
+    const parCategorie = new Map<string, { id: string; nom: string; montant: number; nb: number }>();
+    for (const d of depenses) {
+      const c = parCategorie.get(d.categorie.id) ?? { ...d.categorie, montant: 0, nb: 0 };
+      c.montant += Number(d.montant);
+      c.nb++;
+      parCategorie.set(d.categorie.id, c);
+    }
+    const totalDepenses = arrondi(depenses.reduce((s, d) => s + Number(d.montant), 0));
+    const totalDepensesPrecedent = arrondi(Number(depensesPrecedentes._sum.montant ?? 0));
+
+    const aPayer = fournisseurs
+      .map((f) => ({ ...f, solde: soldes.get(f.id)?.solde ?? 0, nbImpayes: soldes.get(f.id)?.nbImpayes ?? 0 }))
+      .filter((f) => f.solde > 0.0005)
+      .sort((a, b) => b.solde - a.solde);
+
     // ---- Valeur du stock (prix de vente HT)
     const valeur = (rows: { quantite: unknown; article: { prixVente: unknown } }[]) =>
       arrondi(rows.reduce((s, r) => s + Number(r.quantite) * Number(r.article.prixVente), 0));
 
     res.json({
-      periode,
+      // « plage » : période libre choisie au PC ; pas = graduation du graphique.
+      periode: plage ? (plage.nbJours <= 1 ? "jour" : "plage") : periode,
+      pas,
       debut,
       fin,
       precedent: { debut: precedentDebut, fin: precedentFin },
@@ -268,6 +365,184 @@ tableauDeBordRouter.get("/", async (req, res) => {
         lignesSansPrixAchat,
       },
       stock: { depot: valeur(stockDepot), camions: valeur(stockCamion) },
+      facturesVente: {
+        nb: facturesVente.length,
+        total: arrondi(facturesVente.reduce((s, f) => s + Number(f.montantTTC) + Number(f.timbre ?? 0), 0)),
+        blAFacturer: { nb: blAFacturer._count, total: arrondi(Number(blAFacturer._sum.montantTTC ?? 0)) },
+      },
+      achats: {
+        total: totalAchats,
+        precedent: totalAchatsPrecedent,
+        evolution: evol(totalAchats, totalAchatsPrecedent),
+        nbBL: blAchats.length,
+        totalBL: arrondi(blAchats.reduce((s, a) => s + netAPayer(a), 0)),
+        nbFactures: facturesAchats.length,
+        totalFactures: arrondi(facturesAchats.reduce((s, a) => s + netAPayer(a), 0)),
+        nbEntrees: entreesAchats.length,
+        totalEntrees: arrondi(entreesAchats.reduce((s, a) => s + netAPayer(a), 0)),
+      },
+      fournisseurs: {
+        du: arrondi(aPayer.reduce((s, f) => s + f.solde, 0)),
+        nbAPayer: aPayer.length,
+        regle: totalRegle,
+        regleParMode,
+        topAPayer: aPayer.slice(0, 5).map((f) => ({ id: f.id, nom: f.nom, ref: f.ref, divers: f.divers, solde: arrondi(f.solde), nbImpayes: f.nbImpayes })),
+      },
+      depenses: {
+        total: totalDepenses,
+        nb: depenses.length,
+        precedent: totalDepensesPrecedent,
+        evolution: evol(totalDepenses, totalDepensesPrecedent),
+        parCategorie: [...parCategorie.values()].map((c) => ({ ...c, montant: arrondi(c.montant) })).sort((a, b) => b.montant - a.montant),
+      },
+      // Argent entré (encaissements clients) moins argent sorti (fournisseurs payés + dépenses) sur la période. Les
+      // traites comptent à leur échéance ; celles pas encore échues sont à part (« traites à venir »).
+      tresorerie: (() => {
+        const horsTraites = arrondi(reglementsF.filter((r) => r.mode !== "TRAITE").reduce((s, r) => s + Number(r.montant), 0));
+        const traites = arrondi(Number(traitesEchues._sum.montant ?? 0));
+        const sorties = arrondi(horsTraites + traites + totalDepenses);
+        return {
+          entrees: totalEncaisse,
+          sorties,
+          solde: arrondi(totalEncaisse - sorties),
+          traitesEchues: traites,
+          traitesAVenir: { nb: traitesAVenir._count, total: arrondi(Number(traitesAVenir._sum.montant ?? 0)) },
+        };
+      })(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// ---------------------------------------------------------------- Activité d'un jour
+
+const JOURS_ECHEANCE = 10;
+const JOURS_EXPIRATION = 14;
+
+/**
+ * Ce qui a été saisi un jour donné (achats, articles, prix, règlements fournisseurs, documents restés impayés),
+ * et ce qui approche : traites qui arrivent à échéance, articles du dépôt qui expirent dans deux semaines.
+ * ?debut=…&fin=… : bornes du jour, dans le fuseau du PC de l'admin.
+ */
+tableauDeBordRouter.get("/activite", async (req, res) => {
+  try {
+    const societeId = req.societeId!;
+    const debut = typeof req.query.debut === "string" ? new Date(req.query.debut) : new Date(new Date().setHours(0, 0, 0, 0));
+    const fin = typeof req.query.fin === "string" ? new Date(req.query.fin) : new Date(new Date().setHours(23, 59, 59, 999));
+    const jour = { gte: debut, lte: fin };
+    const maintenant = new Date();
+    const limiteEcheance = new Date(maintenant.getTime() + JOURS_ECHEANCE * JOUR_MS);
+    const limiteExpiration = new Date(maintenant.getTime() + JOURS_EXPIRATION * JOUR_MS);
+
+    const [achats, articles, prix, reglements, traites, lots, depenses] = await Promise.all([
+      prisma.achat.findMany({
+        where: { societeId, deletedAt: null, createdAt: jour },
+        include: { fournisseur: { select: { nom: true, divers: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.article.findMany({
+        where: { societeId, deletedAt: null, createdAt: jour },
+        select: { id: true, designation: true, code: true, codeBarre: true, prixAchat: true, prixVente: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.historiquePrix.findMany({
+        where: { date: jour, source: { not: "CREATION" }, article: { societeId } },
+        include: { article: { select: { designation: true } } },
+        orderBy: { date: "asc" },
+      }),
+      prisma.reglementFournisseur.findMany({
+        where: { societeId, deletedAt: null, date: jour },
+        include: { fournisseur: { select: { nom: true, divers: true } }, achat: { select: { type: true, numero: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.reglementFournisseur.findMany({
+        where: { societeId, deletedAt: null, mode: "TRAITE", echeance: { gte: new Date(new Date().setHours(0, 0, 0, 0)), lte: limiteEcheance } },
+        include: { fournisseur: { select: { nom: true, divers: true } }, achat: { select: { type: true, numero: true } } },
+        orderBy: { echeance: "asc" },
+      }),
+      prisma.lotDepot.findMany({
+        where: { quantite: { gt: 0 }, dateExpiration: { not: null, lte: limiteExpiration }, article: { societeId, deletedAt: null } },
+        include: { article: { select: { id: true, designation: true, codeBarre: true } } },
+        orderBy: { dateExpiration: "asc" },
+      }),
+      prisma.depense.findMany({
+        where: { societeId, deletedAt: null, date: jour },
+        include: { categorie: { select: { nom: true } }, fournisseur: { select: { nom: true, divers: true } }, vendeur: { select: { nom: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+
+    const payes = await payesParAchat(achats.map((a) => a.id));
+    const nomTiers = (f: { nom: string; divers: boolean }, libre?: string | null) => (f.divers ? libre || "Divers" : f.nom);
+    const docs = achats.map((a) => {
+      const s = situation(a, payes);
+      return {
+        id: a.id,
+        type: a.type,
+        numero: a.numero,
+        tiers: a.type === "ENTREE" ? a.notes || "—" : nomTiers(a.fournisseur, a.fournisseurLibre),
+        net: arrondi(Number(a.montantTTC) + Number(a.timbre)),
+        paye: s.paye,
+        reste: s.reste,
+        statut: s.statut,
+      };
+    });
+
+    // Changement de prix : comparé au prix précédent de l'article (la ligne d'historique juste avant).
+    const changements = [];
+    for (const p of prix) {
+      const avant = await prisma.historiquePrix.findFirst({ where: { articleId: p.articleId, date: { lt: p.date } }, orderBy: { date: "desc" } });
+      if (!avant) continue;
+      const a0 = Number(avant.prixAchat), a1 = Number(p.prixAchat), v0 = Number(avant.prixVente), v1 = Number(p.prixVente);
+      if (Math.abs(a0 - a1) < 0.0005 && Math.abs(v0 - v1) < 0.0005) continue;
+      changements.push({ id: p.id, articleId: p.articleId, designation: p.article.designation, ancienAchat: a0, nouveauAchat: a1, ancienVente: v0, nouveauVente: v1, date: p.date });
+    }
+
+    res.json({
+      debut,
+      fin,
+      achats: docs,
+      impayes: docs.filter((d) => d.reste > 0),
+      articles: articles.map((a) => ({ ...a, prixAchat: Number(a.prixAchat), prixVente: Number(a.prixVente) })),
+      prix: changements,
+      reglements: reglements.map((r) => ({
+        id: r.id,
+        fournisseur: nomTiers(r.fournisseur),
+        document: r.achat ? `${r.achat.type === "BL" ? "BL" : r.achat.type === "ENTREE" ? "B° Entrée" : "Facture"} n° ${r.achat.numero}` : "Avance sur compte",
+        mode: r.mode,
+        reference: r.reference,
+        montant: Number(r.montant),
+      })),
+      traites: traites.map((r) => ({
+        id: r.id,
+        fournisseur: nomTiers(r.fournisseur),
+        document: r.achat ? `${r.achat.type === "BL" ? "BL" : r.achat.type === "ENTREE" ? "B° Entrée" : "Facture"} n° ${r.achat.numero}` : null,
+        reference: r.reference,
+        montant: Number(r.montant),
+        echeance: r.echeance,
+        jours: Math.ceil((new Date(r.echeance!).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / JOUR_MS),
+      })),
+      depenses: depenses.map((d) => ({
+        id: d.id,
+        description: d.description,
+        categorie: d.categorie.nom,
+        beneficiaire: d.fournisseur ? nomTiers(d.fournisseur) : d.beneficiaire,
+        camion: d.vendeur?.nom ?? null,
+        mode: d.mode,
+        reference: d.reference,
+        montant: Number(d.montant),
+      })),
+      expirations: lots.map((l) => ({
+        id: l.id,
+        articleId: l.article.id,
+        designation: l.article.designation,
+        codeBarre: l.article.codeBarre,
+        quantite: Number(l.quantite),
+        dateExpiration: l.dateExpiration,
+        jours: Math.ceil((new Date(l.dateExpiration!).getTime() - new Date(new Date().setHours(0, 0, 0, 0)).getTime()) / JOUR_MS),
+      })),
     });
   } catch (err) {
     console.error(err);

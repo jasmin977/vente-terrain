@@ -12,14 +12,12 @@ import {
   cubeOutline,
   downloadOutline,
   personOutline,
-  receiptOutline,
 } from "ionicons/icons";
 import {
   getStockCamion,
   getStockDepot,
   getVentesParArticle,
   listChargements,
-  listEntreesDepot,
   type PlageDates,
 } from "../api/stock";
 import { listUsers } from "../api/auth";
@@ -27,7 +25,6 @@ import { listArticles } from "../api/articles";
 import type { Article } from "../types/article";
 import type {
   ChargementResume,
-  EntreeDepotResume,
   StockCamionItem,
   StockDepotItem,
   VentesParArticle,
@@ -37,9 +34,11 @@ import { useAuth } from "../auth/AuthContext";
 import ArticleImage from "../components/ArticleImage";
 import { prixTTC } from "../utils/tarifs";
 import TriArticlesButton from "../components/TriArticlesButton";
-import { CRITERES_STOCK, trierArticles, trierStock, useTriArticles } from "../utils/triArticles";
+import TableauBonsStock from "../components/TableauBonsStock";
+import { CRITERES_STOCK, margeArticle, nomsCategorie, trierArticles, trierStock, useTriArticles } from "../utils/triArticles";
 import { ApiError } from "../api/client";
-import { formatColis, formatDateTime, pieces, joinMeta } from "../utils/format";
+import { formatColis, formatDateTime, pieces, joinMeta, toLocalDateString } from "../utils/format";
+import { dateFr } from "../utils/peremption";
 import { articleCorrespond, articleParCode } from "../utils/articleSearch";
 import FiltreCategorie from "../components/FiltreCategorie";
 import { filtrerParCategorie } from "../utils/categories";
@@ -80,7 +79,7 @@ import { getLocale, t, tn } from "../i18n";
 type Lieu = "depot" | "camion" | "articles";
 // Vocabulaire du dépôt : bons d'entrée (réceptions) et bons de sortie
 // (chargements des camions, tous vendeurs).
-type VueDepot = "stock" | "entrees" | "sorties" | "retours";
+type VueDepot = "stock" | "sorties" | "retours";
 type VueCamion = "stock" | "chargements" | "retours";
 
 /** 1er jour du mois décalé de `decalage` mois par rapport au mois en cours. */
@@ -117,6 +116,14 @@ function TotalDocument({ totalPieces, nbLignes }: { totalPieces: number; nbLigne
   );
 }
 
+/** Largeurs (px) du tableau des articles : code-barres (1re colonne), puis catégorie, sous-catégorie, marque, prix d'achat, prix de vente, marge. */
+const LARGEUR_CODE = 160;
+const LARGEURS_ARTICLES = [220, 140, 180, 110];
+/** En dessous de cette marge (%), elle est signalée en orange ; négative : rouge. */
+const SEUIL_MARGE_FAIBLE = 3;
+/** Largeurs (px) du tableau du dépôt : prix de vente, marge, expiration, puis le stock. */
+const LARGEURS_DEPOT = [150, 110, 160, 140];
+
 export default function Stock() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -133,10 +140,9 @@ export default function Stock() {
   const [vueCamion, setVueCamion] = useState<VueCamion>("stock");
   // Web : Stock / Bons d'entrée, de sortie, de retour (dépôt) et Stock / Chargements / Retours (camion) se choisissent aussi dans le menu (?vue=…).
   const { search: adresse } = useLocation();
-  useVueUrl("/stock", "vue", ["stock", "entrees", "sorties", "retours", "chargements"] as const, (v) => {
-    if (new URLSearchParams(adresse).get("lieu") === "camion") {
-      if (v === "stock" || v === "chargements" || v === "retours") setVueCamion(v);
-    } else if (v !== "chargements") setVueDepot(v);
+  useVueUrl("/stock", "vue", ["stock", "sorties", "retours", "chargements"] as const, (v) => {
+    if (new URLSearchParams(adresse).get("lieu") === "camion") setVueCamion("stock");
+    else if (v !== "chargements") setVueDepot(v);
   });
   /** Chargements et mouvements du camion : 0 = mois en cours, -1 = mois précédent… */
   const [decalageMois, setDecalageMois] = useState(0);
@@ -144,9 +150,11 @@ export default function Stock() {
   const [vendeurs, setVendeurs] = useState<UserSummary[]>([]);
   const [vendeurId, setVendeurId] = useState<string | undefined>(undefined);
   const [vendeurSheet, setVendeurSheet] = useState(false);
+  // B° Sortie / B° Retour du dépôt : tous les camions, ou un seul.
+  const [camionFiltre, setCamionFiltre] = useState<string | undefined>(undefined);
+  const [camionFiltreSheet, setCamionFiltreSheet] = useState(false);
   const [depot, setDepot] = useState<StockDepotItem[]>([]);
   const [ventes, setVentes] = useState<VentesParArticle | null>(null);
-  const [entrees, setEntrees] = useState<EntreeDepotResume[]>([]);
   const [stock, setStock] = useState<StockCamionItem[]>([]);
   const [chargements, setChargements] = useState<ChargementResume[]>([]);
   const [sorties, setSorties] = useState<ChargementResume[]>([]);
@@ -178,14 +186,18 @@ export default function Stock() {
           const [d, v] = await Promise.all([getStockDepot(), getVentesParArticle(30).catch(() => null)]);
           setDepot(d);
           setVentes(v);
-        } else if (vueDepot === "entrees") setEntrees(await listEntreesDepot(plageMois(decalageMois)));
-        else {
+        } else {
           // Bons de sortie = chargements ; bons de retour = retours camion → dépôt (tous camions).
           const sens = vueDepot === "sorties" ? "CHARGEMENT" : "RETOUR";
-          setSorties((await listChargements(undefined, plageMois(decalageMois))).filter((c) => c.sens === sens));
+          setSorties((await listChargements(camionFiltre, plageMois(decalageMois))).filter((c) => c.sens === sens));
         }
       } else if (vendeurId) {
-        if (vueCamion === "stock") setStock(await getStockCamion(vendeurId));
+        if (vueCamion === "stock") {
+          // Expiration : le camion ne suit pas les lots, on affiche la date la plus proche du même article au dépôt.
+          const [s, d] = await Promise.all([getStockCamion(vendeurId), getStockDepot().catch(() => [] as StockDepotItem[])]);
+          const exp = new Map(d.map((x) => [x.articleId, x.prochaineExpiration ?? null]));
+          setStock(s.map((i) => ({ ...i, prochaineExpiration: exp.get(i.articleId) ?? null })));
+        }
         else if (vueCamion === "chargements" || vueCamion === "retours") {
           const sens = vueCamion === "chargements" ? "CHARGEMENT" : "RETOUR";
           setChargements((await listChargements(vendeurId, plageMois(decalageMois))).filter((c) => c.sens === sens));
@@ -196,7 +208,7 @@ export default function Stock() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, lieu, vueDepot, vueCamion, vendeurId, decalageMois]);
+  }, [isAdmin, lieu, vueDepot, vueCamion, vendeurId, decalageMois, camionFiltre]);
 
   useEffect(() => {
     setLoading(true);
@@ -231,7 +243,7 @@ export default function Stock() {
   );
   const [triArticles, setTriArticles] = useTriArticles();
   const articlesFiltres = useMemo(
-    () => trierArticles(filtrerParCategorie(articles.filter((a) => articleCorrespond(a, q)), categories, categorie, (a) => a), triArticles),
+    () => trierArticles(filtrerParCategorie(articles.filter((a) => articleCorrespond(a, q)), categories, categorie, (a) => a), triArticles, categories),
     [articles, q, categories, categorie, triArticles]
   );
 
@@ -255,6 +267,33 @@ export default function Stock() {
     else setQuery(code);
   };
 
+  // Colonnes du tableau des articles : catégorie, sous-catégorie, marque, code-barres, prix d'achat TTC.
+  const cellulesArticle = (a: Article) => {
+    const { sous } = nomsCategorie(categories, a.categorieId);
+    return [sous, a.marque, <Money key="v" value={prixTTC(a)} />];
+  };
+  // Marge : rouge si négative, orange si proche de zéro.
+  const margeCellule = (a: Article) => {
+    const m = margeArticle(a);
+    if (m === undefined) return "—";
+    const classe = m < 0 ? " rc-marge--negative" : m < SEUIL_MARGE_FAIBLE ? " rc-marge--faible" : "";
+    return <span className={`rc-marge${classe}`}>{`${m.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}</span>;
+  };
+
+  // Date d'expiration la plus proche : rouge si dépassée, orange dans les 30 jours.
+  /** Date d'expiration la plus proche ; au dépôt, avec entre parenthèses les pièces qui expirent ce jour-là. */
+  const celluleExpiration = (iso?: string | null, quantite?: number | null) => {
+    if (!iso) return "—";
+    const jours = Math.round((new Date(`${iso}T00:00:00`).getTime() - new Date(`${toLocalDateString(new Date())}T00:00:00`).getTime()) / 86_400_000);
+    const classe = jours < 0 ? " rc-marge--negative" : jours <= 30 ? " rc-marge--faible" : "";
+    return (
+      <span className={`rc-marge${classe}`} title={quantite != null ? tn(quantite, "{n} pièce expire à cette date", "{n} pièces expirent à cette date") : undefined}>
+        {dateFr(iso)}
+        {quantite != null && ` (${quantite})`}
+      </span>
+    );
+  };
+
   const contenuArticles = () => (
     <>
     <Section className="rc-barre-outils">
@@ -264,9 +303,12 @@ export default function Stock() {
       <Button variant="ghost" block icon={imageOutline} onClick={() => setPhotosOuvert(true)}>
         {t("Trouver les photos en ligne")}
       </Button>
-      <Button variant="ghost" block icon={folderOpenOutline} onClick={() => navigate("/stock/categories")}>
-        {t("Gérer les catégories")}
-      </Button>
+      {/* Web : les catégories ont leur entrée dans le menu latéral. */}
+      {!web && (
+        <Button variant="ghost" block icon={folderOpenOutline} onClick={() => navigate("/stock/categories")}>
+          {t("Gérer les catégories")}
+        </Button>
+      )}
     </Section>
     <Section
       flush
@@ -274,11 +316,15 @@ export default function Stock() {
         articles.length > 0 ? (
           <span className="rc-liste-tete">
             <span>{tn(articlesFiltres.length, "{n} article", "{n} articles")}</span>
-            <TriArticlesButton value={triArticles} onChange={setTriArticles} />
+            <span className="rc-tri-bouton">
+              <TriArticlesButton value={triArticles} onChange={setTriArticles} />
+            </span>
           </span>
         ) : undefined
       }
     >
+      {/* Web : le filtre de catégorie est juste au-dessus du tableau. */}
+      {web && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
       {articlesFiltres.length === 0 ? (
         <EmptyState
           icon={cubeOutline}
@@ -287,7 +333,22 @@ export default function Stock() {
         />
       ) : (
         <>
-        <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Prix TTC")} vignette chevron />
+        <EnteteTableau
+          titre={t("Désignation")}
+          premiere={{ label: t("Code-barres"), cle: "codeBarre", largeur: LARGEUR_CODE }}
+          colonnes={[t("Sous-catégorie"), t("Marque"), t("Prix de vente TTC")]}
+          dernier={t("Marge")}
+          largeurs={LARGEURS_ARTICLES}
+          vignette
+          chevron
+          tri={{
+            titre: "alpha",
+            colonnes: ["sousCategorie", "marque", "prix"],
+            dernier: "marge",
+            valeur: triArticles,
+            onChange: setTriArticles,
+          }}
+        />
         <div className="rc-list">
           {listeArticles.visibles.map((a) => (
             <Row
@@ -296,10 +357,23 @@ export default function Stock() {
               thumb
               chevron
               onClick={() => navigate(`/articles/${a.id}`)}
-              leading={<ArticleImage src={a.img} alt="" />}
+              leading={
+                web ? (
+                  <>
+                    <span className="rc-tableau__cellule rc-tableau__premiere rc-web-only--table" style={{ "--rc-col": `${LARGEUR_CODE}px` } as React.CSSProperties}>
+                      <span className="rc-tableau__texte">{a.codeBarre}</span>
+                    </span>
+                    <span className="rc-tableau__photo">
+                      <ArticleImage src={a.img} alt="" />
+                    </span>
+                  </>
+                ) : (
+                  <ArticleImage src={a.img} alt="" />
+                )
+              }
               title={a.designation}
               meta={joinMeta([a.code, a.unit, a.marque])}
-              trailing={<CellulesTableau valeurs={[a.marque, a.unit, a.codeBarre]} dernier={<Money value={prixTTC(a)} />} />}
+              trailing={<CellulesTableau valeurs={cellulesArticle(a)} largeurs={LARGEURS_ARTICLES} dernier={margeCellule(a)} />}
             />
           ))}
           <ChargerPlus reste={listeArticles.reste} onPlus={listeArticles.plus} />
@@ -311,34 +385,6 @@ export default function Stock() {
   );
 
   const contenuDepot = () => {
-    if (vueDepot === "entrees") {
-      return (
-        <Section flush aside={entrees.length > 0 ? tn(entrees.length, "{n} bon d'entrée", "{n} bons d'entrée") : undefined}>
-          {entrees.length === 0 ? (
-            <EmptyState icon={receiptOutline} title={t("Aucun bon d'entrée ce mois-ci.")} message={t("Les réceptions au dépôt apparaîtront ici.")} />
-          ) : (
-            <div className="rc-list">
-              {entrees.map((e) => (
-                <Row
-                  key={e.id}
-                  muted={Boolean(e.deletedAt)}
-                  chevron
-                  onClick={() => navigate(`/stock/entrees/${e.id}`)}
-                  title={e.reference || t("Bon d'entrée sans référence")}
-                  meta={joinMeta([formatDateTime(e.date), e.admin?.nom])}
-                  trailing={
-                    <>
-                      <TotalDocument totalPieces={e.totalPieces} nbLignes={e.nbLignes} />
-                      {e.deletedAt && <Tag tone="danger">{t("Supprimée")}</Tag>}
-                    </>
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </Section>
-      );
-    }
     if (vueDepot === "sorties" || vueDepot === "retours") {
       const retours = vueDepot === "retours";
       return (
@@ -358,6 +404,20 @@ export default function Stock() {
             ) : (
               <EmptyState icon={carOutline} title={t("Aucun bon de sortie ce mois-ci.")} message={t("Les chargements des camions apparaîtront ici.")} />
             )
+          ) : web ? (
+            <TableauBonsStock
+              type={retours ? "retour" : "sortie"}
+              onOuvrir={(id) => navigate(`/stock/chargements/${id}`)}
+              lignes={sorties.map((c) => ({
+                id: c.id,
+                reference: c.reference,
+                date: c.date,
+                personne: c.vendeur.nom,
+                nbLignes: c.nbLignes,
+                totalPieces: c.totalPieces,
+                supprime: Boolean(c.deletedAt),
+              }))}
+            />
           ) : (
             <div className="rc-list">
               {sorties.map((c) => (
@@ -400,15 +460,33 @@ export default function Stock() {
                   })}
                 </span>
               </span>
-              {depot.length > 0 && <TriArticlesButton value={triDepot} onChange={setTriDepot} criteres={CRITERES_STOCK} />}
+              {depot.length > 0 && (
+                <span className="rc-tri-bouton">
+                  <TriArticlesButton value={triDepot} onChange={setTriDepot} criteres={CRITERES_STOCK} />
+                </span>
+              )}
             </span>
           }
         >
+          {/* Web : le filtre de catégorie est juste au-dessus du tableau. */}
+          {web && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
           {depotFiltre.length === 0 ? (
             <EmptyState icon={cubeOutline} title={t("Aucun article.")} message={q ? t("Essayez une autre recherche.") : undefined} />
           ) : (
             <>
-            <EnteteTableau titre={t("Désignation")} colonnes={[t("Marque"), t("Unité"), t("Code-barres")]} dernier={t("Stock")} vignette />
+            <EnteteTableau
+              titre={t("Désignation")}
+              premiere={web ? { label: t("Code-barres"), cle: "codeBarre", largeur: LARGEUR_CODE } : undefined}
+              colonnes={web ? [t("Prix de vente TTC"), t("Marge"), t("Expiration")] : [t("Marque"), t("Code-barres")]}
+              dernier={t("Stock")}
+              largeurs={web ? LARGEURS_DEPOT : undefined}
+              vignette
+              tri={
+                web
+                  ? { titre: "alpha", colonnes: ["prix", "marge", "expiration"], dernier: "quantite", valeur: triDepot, onChange: setTriDepot }
+                  : { titre: "alpha", colonnes: ["marque", "codeBarre"], dernier: "quantite", valeur: triDepot, onChange: setTriDepot }
+              }
+            />
             <div className="rc-list">
               {listeDepot.visibles.map((d) => (
                 <Row
@@ -417,12 +495,30 @@ export default function Stock() {
                   thumb
                   onClick={() => navigate(`/articles/${d.articleId}`)}
                   muted={d.quantite === 0}
-                  leading={<ArticleImage src={d.article.img} alt="" />}
+                  leading={
+                    web ? (
+                      <>
+                        <span className="rc-tableau__cellule rc-tableau__premiere rc-web-only--table" style={{ "--rc-col": `${LARGEUR_CODE}px` } as React.CSSProperties}>
+                          <span className="rc-tableau__texte">{d.article.codeBarre}</span>
+                        </span>
+                        <span className="rc-tableau__photo">
+                          <ArticleImage src={d.article.img} alt="" />
+                        </span>
+                      </>
+                    ) : (
+                      <ArticleImage src={d.article.img} alt="" />
+                    )
+                  }
                   title={d.article.designation}
                   meta={joinMeta([d.article.code, d.article.unit])}
                   trailing={
                     <CellulesTableau
-                      valeurs={[d.article.marque, d.article.unit, d.article.codeBarre]}
+                      valeurs={
+                        web
+                          ? [<Money key="p" value={prixTTC(d.article)} />, margeCellule(d.article), celluleExpiration(d.prochaineExpiration, d.quantiteExpiration)]
+                          : [d.article.marque, d.article.codeBarre]
+                      }
+                      largeurs={web ? LARGEURS_DEPOT : undefined}
                       dernier={<Quantity value={d.quantite} colisage={Number(d.article.colisage)} />}
                     />
                   }
@@ -457,6 +553,20 @@ export default function Stock() {
             ) : (
               <EmptyState icon={carOutline} title={t("Aucun chargement ce mois-ci.")} message={t("Les chargements de ce camion apparaîtront ici.")} />
             )
+          ) : web ? (
+            <TableauBonsStock
+              type={retours ? "retour" : "sortie"}
+              onOuvrir={(id) => navigate(`/stock/chargements/${id}`)}
+              lignes={chargements.map((c) => ({
+                id: c.id,
+                reference: c.reference,
+                date: c.date,
+                personne: c.vendeur.nom,
+                nbLignes: c.nbLignes,
+                totalPieces: c.totalPieces,
+                supprime: Boolean(c.deletedAt),
+              }))}
+            />
           ) : (
             <div className="rc-list">
               {chargements.map((c) => (
@@ -493,11 +603,15 @@ export default function Stock() {
                   q: `${total} ${pieces(total)}`,
                 })}
               </span>
-              <TriArticlesButton value={triCamion} onChange={setTriCamion} criteres={CRITERES_STOCK} />
+              <span className="rc-tri-bouton">
+                <TriArticlesButton value={triCamion} onChange={setTriCamion} criteres={CRITERES_STOCK} />
+              </span>
             </span>
           ) : undefined
         }
       >
+        {/* Web : le filtre de catégorie est juste au-dessus du tableau. */}
+        {web && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
         {stockFiltre.length === 0 ? (
           <EmptyState
             icon={carOutline}
@@ -505,35 +619,72 @@ export default function Stock() {
             message={q ? t("Essayez une autre recherche.") : t("Chargez ce camion depuis le dépôt.")}
           />
         ) : (
-          <div className="rc-list">
-            {listeCamion.visibles.map((item) => {
-              const qte = Number(item.quantite);
-              return (
-                <Row
-                  key={item.id}
-                  thumb
-                  onClick={() => navigate(`/stock/camion/${vendeurId}/articles/${item.articleId}`)}
-                  muted={qte === 0}
-                  leading={<ArticleImage src={item.article.img} alt="" />}
-                  title={item.article.designation}
-                  meta={joinMeta([item.article.code, item.article.unit])}
-                  trailing={<Quantity value={qte} colisage={Number(item.article.colisage)} />}
-                />
-              );
-            })}
-            <ChargerPlus reste={listeCamion.reste} onPlus={listeCamion.plus} />
-          </div>
+          <>
+            {web && (
+              <EnteteTableau
+                titre={t("Désignation")}
+                premiere={{ label: t("Code-barres"), cle: "codeBarre", largeur: LARGEUR_CODE }}
+                colonnes={[t("Prix de vente TTC"), t("Marge"), t("Expiration")]}
+                dernier={t("Stock")}
+                largeurs={LARGEURS_DEPOT}
+                vignette
+                tri={{ titre: "alpha", colonnes: ["prix", "marge", "expiration"], dernier: "quantite", valeur: triCamion, onChange: setTriCamion }}
+              />
+            )}
+            <div className="rc-list">
+              {listeCamion.visibles.map((item) => {
+                const qte = Number(item.quantite);
+                return (
+                  <Row
+                    key={item.id}
+                    className={web ? "rc-row--tableau" : undefined}
+                    thumb
+                    onClick={() => navigate(`/stock/camion/${vendeurId}/articles/${item.articleId}`)}
+                    muted={qte === 0}
+                    leading={
+                      web ? (
+                        <>
+                          <span className="rc-tableau__cellule rc-tableau__premiere rc-web-only--table" style={{ "--rc-col": `${LARGEUR_CODE}px` } as React.CSSProperties}>
+                            <span className="rc-tableau__texte">{item.article.codeBarre}</span>
+                          </span>
+                          <span className="rc-tableau__photo">
+                            <ArticleImage src={item.article.img} alt="" />
+                          </span>
+                        </>
+                      ) : (
+                        <ArticleImage src={item.article.img} alt="" />
+                      )
+                    }
+                    title={item.article.designation}
+                    meta={joinMeta([item.article.code, item.article.unit])}
+                    trailing={
+                      web ? (
+                        <CellulesTableau
+                          valeurs={[<Money key="p" value={prixTTC(item.article)} />, margeCellule(item.article), celluleExpiration(item.prochaineExpiration)]}
+                          largeurs={LARGEURS_DEPOT}
+                          dernier={<Quantity value={qte} colisage={Number(item.article.colisage)} />}
+                        />
+                      ) : (
+                        <Quantity value={qte} colisage={Number(item.article.colisage)} />
+                      )
+                    }
+                  />
+                );
+              })}
+              <ChargerPlus reste={listeCamion.reste} onPlus={listeCamion.plus} />
+            </div>
+          </>
         )}
       </Section>
     );
   };
 
   return (
-    <IonPage>
+    <IonPage className={lieu === "articles" || (lieu === "depot" && vueDepot === "stock") || (lieu === "camion" && vueCamion === "stock") ? "rc-page--large" : undefined}>
       <AppHeader
         large
         eyebrow={web && lieu !== "articles" ? t("Stock") : undefined}
-        title={web ? (lieu === "depot" ? t("Dépôt") : lieu === "camion" ? t("Camion") : t("Articles")) : t("Stock")}
+        title={web ? (lieu === "depot" ? t("Dépôt") : lieu === "camion" ? t("Camion") : t("Liste des articles")) : t("Stock")}
         actions={<AccountButton />}
       >
         {!web && (
@@ -551,6 +702,16 @@ export default function Stock() {
             ]}
           />
         )}
+        {lieu === "depot" && (vueDepot === "sorties" || vueDepot === "retours") && (
+          <div>
+            <FilterChip
+              label={camionFiltre ? vendeurs.find((v) => v.id === camionFiltre)?.nom ?? t("Camion") : t("Tous les camions")}
+              active={Boolean(camionFiltre)}
+              ariaLabel={t("Filtrer par camion")}
+              onOpen={() => setCamionFiltreSheet(true)}
+            />
+          </div>
+        )}
         {lieu === "camion" && (
           <div>
             <FilterChip
@@ -562,7 +723,9 @@ export default function Stock() {
           </div>
         )}
         {vueProduits && <SearchField value={query} onChange={setQuery} onScan={handleScan} placeholder={t("Désignation, marque, réf…")} />}
-        {vueProduits && <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />}
+        {vueProduits && !(web && (lieu === "articles" || (lieu === "depot" && vueDepot === "stock") || (lieu === "camion" && vueCamion === "stock"))) && (
+          <FiltreCategorie categories={categories} value={categorie} onChange={setCategorie} />
+        )}
       </AppHeader>
 
       <IonContent {...haut.contenu}>
@@ -592,24 +755,11 @@ export default function Stock() {
                 variant="onglets"
                 options={[
                   { value: "stock", label: t("Stock") },
-                  { value: "entrees", label: t("B° Entrée") },
                   { value: "sorties", label: t("B° Sortie") },
                   { value: "retours", label: t("B° Retour") },
                 ]}
               />
-            ) : (
-              <Segmented
-                label={t("Affichage du camion")}
-                value={vueCamion}
-                onChange={setVueCamion}
-                variant="onglets"
-                options={[
-                  { value: "stock", label: t("Stock") },
-                  { value: "chargements", label: t("Chargements") },
-                  { value: "retours", label: t("Retours") },
-                ]}
-              />
-            )}
+            ) : null}
           </div>
         )}
 
@@ -667,17 +817,13 @@ export default function Stock() {
           <Fab icon={addOutline} label={t("Nouvel article")} onClick={() => navigate("/articles/new")} />
         ) : lieu === "depot" ? (
           vueDepot === "sorties" ? (
-            <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement")} />
+            <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId: camionFiltre } })} />
           ) : vueDepot === "retours" ? (
-            <Fab icon={addOutline} label={t("B° Retour")} onClick={() => navigate("/stock/retour")} />
+            <Fab icon={addOutline} label={t("B° Retour")} onClick={() => navigate("/stock/retour", { state: { vendeurId: camionFiltre } })} />
           ) : (
-            <Fab icon={downloadOutline} label={t("B° Entrée")} onClick={() => navigate("/stock/entree")} />
+            <Fab icon={downloadOutline} label={t("Nouveau B° Entrée")} onClick={() => navigate("/achats/entrees")} />
           )
-        ) : vueCamion === "retours" ? (
-          <Fab icon={addOutline} label={t("B° Retour")} onClick={() => navigate("/stock/retour", { state: { vendeurId } })} />
-        ) : (
-          <Fab icon={addOutline} label={t("B° Chargement")} onClick={() => navigate("/stock/chargement", { state: { vendeurId } })} />
-        )}
+        ) : null}
         <BoutonHaut visible={haut.visible} onClick={haut.remonter} />
       </IonContent>
 
@@ -696,6 +842,17 @@ export default function Stock() {
 
       <TrouverPhotosSheet isOpen={photosOuvert} onDismiss={() => setPhotosOuvert(false)} onFait={fetchData} />
 
+      <PickerSheet
+        isOpen={camionFiltreSheet}
+        title={t("Camion")}
+        value={camionFiltre ?? "__tous__"}
+        onDismiss={() => setCamionFiltreSheet(false)}
+        onSelect={(v) => {
+          setCamionFiltre(v === "__tous__" ? undefined : v);
+          setCamionFiltreSheet(false);
+        }}
+        options={[{ value: "__tous__", label: t("Tous les camions") }, ...vendeurs.map((v) => ({ value: v.id, label: v.nom, meta: v.code, keywords: v.code }))]}
+      />
       <PickerSheet
         isOpen={vendeurSheet}
         title={t("Vendeur")}

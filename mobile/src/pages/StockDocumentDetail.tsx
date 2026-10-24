@@ -223,6 +223,9 @@ export default function StockDocumentDetail({ kind }: { kind: Kind }) {
                     date: formatDateTime(doc.deletedAt!),
                   })}
                 </Notice>
+              ) : kind === "entree" ? (
+                // Anciens bons d'entrée : historique en lecture seule (les achats se font maintenant dans Achats).
+                <Notice tone="info">{t("Ancien bon d'entrée : gardé pour l'historique, il ne se modifie plus.")}</Notice>
               ) : doc.suppression.possible ? (
                 <div className="rc-fields">
                   {doc.suppression.avertissement && <Notice tone="warning">{doc.suppression.avertissement}</Notice>}

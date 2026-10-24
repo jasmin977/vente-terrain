@@ -21,17 +21,31 @@ export function formatAmount(value: number | string): string {
   return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f")}.${dec}`;
 }
 
+const deux = (n: number) => String(n).padStart(2, "0");
+
+// jj/mm/aaaa, quelle que soit la langue ou la locale du navigateur.
 export function formatDate(value: string | Date): string {
-  return new Date(value).toLocaleDateString(getLocale(), { day: "numeric", month: "short", year: "numeric" });
+  const d = new Date(value);
+  return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
 export function formatDateTime(value: string | Date): string {
-  return new Date(value).toLocaleString(getLocale(), {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const d = new Date(value);
+  return `${formatDate(d)} ${deux(d.getHours())}:${deux(d.getMinutes())}`;
+}
+
+// "2026-10-06" ↔ "06/10/2026" (valeur interne ISO, affichage jj/mm/aaaa).
+export function isoVersAffichage(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+export function affichageVersIso(texte: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texte);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (d.getFullYear() !== Number(m[3]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[1])) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 export function formatTime(value: string | Date): string {

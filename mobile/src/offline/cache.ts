@@ -2,6 +2,7 @@ import type { Article } from "../types/article";
 import type { Categorie } from "../types/categorie";
 import type { Client } from "../types/client";
 import type { CreditClient } from "../types/credit";
+import type { Promotion } from "../types/promotion";
 import type { Facture } from "../types/facture";
 import { ecrire, lire } from "./stockage";
 
@@ -14,6 +15,8 @@ export interface Caches {
   credits: CreditClient[];
   /** Factures du jour du vendeur, telles que renvoyées par le serveur. */
   factures: Facture[];
+  /** Promotions en cours et de la semaine (appliquées aux BL, hors ligne aussi). */
+  promotions: Promotion[];
 }
 
 export const lireCache = <K extends keyof Caches>(nom: K) => lire<Caches[K]>(`cache:${nom}`, []);
@@ -38,14 +41,14 @@ export async function reserverNumero(codeVendeur: string): Promise<string> {
   const annee = anneeCourte();
   let c = await lire<Compteur | null>("numero", null);
   if (!c || c.annee !== annee) c = { annee, prochain: 1 };
-  const numero = `${codeVendeur}-${annee}-${String(c.prochain).padStart(4, "0")}`;
+  const numero = `${annee}/${String(c.prochain).padStart(4, "0")}`;
   await ecrire("numero", { annee, prochain: c.prochain + 1 });
   return numero;
 }
 
-/** `numero` : prochain numéro selon le serveur (ex. V001-26-0007). */
+/** `numero` : prochain numéro selon le serveur (ex. 26/0007). */
 export async function recalerNumero(numero: string): Promise<void> {
-  const m = numero.match(/-(\d{2})-(\d+)$/);
+  const m = numero.match(/^(\d{2})\/(\d+)$/);
   if (!m) return;
   const [, annee, seq] = m;
   const c = await lire<Compteur | null>("numero", null);

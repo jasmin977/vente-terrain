@@ -184,6 +184,13 @@ ion-modal.rc-sheet {
   --handle-height: 5px;
 }
 
+/* Fenêtre ouverte par-dessus une autre : Ionic lui retire voile et ombre (elle se confondait avec celle du
+   dessous). On les rend : la fenêtre du dessous s'assombrit, celle du dessus garde son ombre et un filet. */
+ion-modal.modal-default.show-modal ~ ion-modal.modal-default.rc-sheet {
+  --backdrop-opacity: 0.35;
+  --box-shadow: 0 0 0 1px var(--rc-line-strong), 0 24px 64px rgb(0 0 0 / 0.28), 0 4px 14px rgb(0 0 0 / 0.14);
+}
+
 ion-modal.rc-sheet ion-content {
   --background: var(--rc-surface);
 }

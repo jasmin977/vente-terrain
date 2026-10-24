@@ -5,12 +5,12 @@ import { cameraOutline } from "ionicons/icons";
 import { createSociete, updateSociete } from "../api/societes";
 import { uploadImage } from "../api/uploads";
 import { ApiError } from "../api/client";
-import type { Societe, SocieteInput } from "../types/societe";
-import { Button, Field, Notice, Sheet } from "../ui";
+import type { Societe, SocieteInput, TypeSociete } from "../types/societe";
+import { Button, Field, Notice, Segmented, Sheet } from "../ui";
 import { t } from "../i18n";
 import SocieteLogo from "./SocieteLogo";
 
-const vide: SocieteInput = { nom: "", code: "", activite: "", matriculeFiscal: "", adresse: "", telephone: "", logo: "" };
+const vide: SocieteInput = { nom: "", code: "", activite: "", matriculeFiscal: "", adresse: "", telephone: "", logo: "", type: "DEPOT" };
 
 // Code proposé à partir du nom : initiales (Bonne Affaire Cosmetix → BAC).
 const codePropose = (nom: string) =>
@@ -104,6 +104,7 @@ export default function SocieteFormSheet({
                 adresse: societe.adresse ?? "",
                 telephone: societe.telephone ?? "",
                 logo: societe.logo ?? "",
+                type: societe.type ?? "DEPOT",
               }
             : vide
         );
@@ -143,6 +144,21 @@ export default function SocieteFormSheet({
           required
           hint={t("2 à 6 lettres ou chiffres. Préfixe des codes vendeurs (ex. RC → RC-V001).")}
         />
+        <div className="rc-field">
+          <span className="rc-field__label">{t("Type")}</span>
+          <Segmented<TypeSociete>
+            label={t("Type de société")}
+            value={form.type ?? "DEPOT"}
+            onChange={(v) => setForm((f) => ({ ...f, type: v }))}
+            options={[
+              { value: "DEPOT", label: t("Dépôt") },
+              { value: "SUPERMARCHE", label: t("Supermarché") },
+            ]}
+          />
+          <span className="rc-field__hint">
+            {form.type === "SUPERMARCHE" ? t("Tout le dépôt, plus les caisses du magasin (postes, caissiers, touches, tickets).") : t("Distribution : dépôt, vendeurs et camions.")}
+          </span>
+        </div>
         <Field label={t("Activité")} value={form.activite ?? ""} onChange={(v) => update("activite", v)} placeholder={t("ex : Fabrication de parfums et de cosmétiques")} />
         <Field label={t("Matricule fiscal")} value={form.matriculeFiscal ?? ""} onChange={(v) => update("matriculeFiscal", v)} autoCapitalize="characters" />
         <Field label={t("Adresse")} value={form.adresse ?? ""} onChange={(v) => update("adresse", v)} />

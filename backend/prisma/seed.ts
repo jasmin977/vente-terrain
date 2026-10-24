@@ -53,6 +53,7 @@ async function main() {
     where: { societeId_code: { societeId: societe.id, code: "CLI001" } },
     create: {
       societeId: societe.id,
+      ref: 1,
       code: "CLI001",
       nomCommerce: "Superette El Manar",
       responsable: "Karim",

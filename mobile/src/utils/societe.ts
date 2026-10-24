@@ -15,5 +15,6 @@ export function societeImprimee() {
     matriculeFiscal: courante?.matriculeFiscal ?? "",
     adresse: courante?.adresse ?? "",
     telephone: courante?.telephone ?? "",
+    logo: courante?.logo ?? null,
   };
 }

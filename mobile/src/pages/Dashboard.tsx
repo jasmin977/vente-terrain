@@ -14,8 +14,9 @@ import type { PeriodeTableauDeBord, TableauDeBord } from "../types/tableauDeBord
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { getLocale, t, tn } from "../i18n";
-import { formatAmount, formatLongDate, pieces } from "../utils/format";
+import { formatAmount, formatDate, formatLongDate, parseLocalDate, pieces, toLocalDateString } from "../utils/format";
 import {
+  Field,
   AccountButton,
   AppHeader,
   BarRanking,
@@ -32,9 +33,11 @@ import {
   SkeletonList,
   SplitBar,
   Tag,
+  useEcranLarge,
 } from "../ui";
 import type { BarRankingItem, ColumnPoint } from "../ui";
 import DemarrageSociete from "../components/DemarrageSociete";
+import DashboardWeb from "../components/DashboardWeb";
 
 const HACHURE_CREDIT = "repeating-linear-gradient(135deg, var(--rc-chart-credit) 0 2px, var(--rc-warning-soft) 2px 4px)";
 
@@ -42,7 +45,10 @@ const HACHURE_CREDIT = "repeating-linear-gradient(135deg, var(--rc-chart-credit)
 function points(d: TableauDeBord): ColumnPoint[] {
   return d.chiffreAffaires.serie.map((p, i) => {
     const date = new Date(p.debut);
-    if (d.periode === "jour") {
+    if (d.pas === "mois") {
+      return { id: String(i), axis: date.toLocaleDateString(getLocale(), { month: "short" }), label: date.toLocaleDateString(getLocale(), { month: "long", year: "numeric" }), value: p.montant };
+    }
+    if (d.periode === "jour" || d.pas === "heure") {
       return { id: String(i), axis: `${i}`, label: t("{a}h – {b}h", { a: i, b: i + 1 }), value: p.montant };
     }
     const axis =
@@ -51,6 +57,16 @@ function points(d: TableauDeBord): ColumnPoint[] {
         : String(date.getDate());
     return { id: String(i), axis, label: formatLongDate(date), value: p.montant };
   });
+}
+
+/** Raccourcis de période du PC : Aujourd'hui, Ce mois, Mois dernier, Cette année. */
+function plageRaccourci(r: "jour" | "mois" | "moisDernier" | "annee") {
+  const d = new Date();
+  if (r === "jour") return { du: toLocalDateString(d), au: toLocalDateString(d) };
+  if (r === "mois") return { du: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 1)), au: toLocalDateString(d) };
+  if (r === "moisDernier")
+    return { du: toLocalDateString(new Date(d.getFullYear(), d.getMonth() - 1, 1)), au: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 0)) };
+  return { du: toLocalDateString(new Date(d.getFullYear(), 0, 1)), au: toLocalDateString(d) };
 }
 
 /** Mois décalé de `decalage` mois par rapport au mois en cours (1er du mois). */
@@ -93,9 +109,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
+  const web = useEcranLarge();
   const [periode, setPeriode] = useState<PeriodeTableauDeBord>("jour");
   /** Période « mois » : 0 = mois en cours, -1 = mois précédent, etc. */
   const [decalageMois, setDecalageMois] = useState(0);
+  // PC : période libre (aujourd'hui par défaut).
+  const [plage, setPlage] = useState(() => plageRaccourci("jour"));
   const [data, setData] = useState<TableauDeBord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,13 +128,13 @@ export default function Dashboard() {
     if (!isAdmin) return;
     setError(null);
     try {
-      setData(await getTableauDeBord(periode, moisParam));
+      setData(web ? await getTableauDeBord("mois", undefined, plage) : await getTableauDeBord(periode, moisParam));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("Impossible de charger le tableau de bord"));
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, periode, moisParam]);
+  }, [isAdmin, periode, moisParam, web, plage]);
 
   useEffect(() => {
     setLoading(true);
@@ -136,8 +155,14 @@ export default function Dashboard() {
 
   if (!isAdmin) return <Navigate to="/factures" replace />;
 
-  const libellePeriode =
-    periode === "jour"
+  const aujourdhuiTexte = toLocalDateString(new Date());
+  const libellePeriode = web
+    ? plage.du === plage.au
+      ? plage.du === aujourdhuiTexte
+        ? t("Aujourd'hui")
+        : formatDate(parseLocalDate(plage.du))
+      : t("Du {a} au {b}", { a: formatDate(parseLocalDate(plage.du)), b: formatDate(parseLocalDate(plage.au)) })
+    : periode === "jour"
       ? t("Aujourd'hui")
       : periode === "semaine"
         ? t("Cette semaine")
@@ -146,6 +171,19 @@ export default function Dashboard() {
           : t("Ce mois");
 
   const contenu = (d: TableauDeBord) => {
+    // Ordinateur : tableau de bord en cartes (indicateurs, graphiques, classements).
+    if (web) {
+      return (
+        <DashboardWeb
+          d={d}
+          libellePeriode={libellePeriode}
+          moisPasse={moisPasse}
+          serie={serie}
+          onVoirCredits={() => navigate("/clients?vue=credits")}
+          onVoirArticles={() => navigate("/stock?lieu=articles")}
+        />
+      );
+    }
     const ca = d.chiffreAffaires;
     const pm = d.encaissements.parMode;
     const especes = (pm.ESPECES ?? 0) + (pm.TPE ?? 0); // anciens règlements TPE : comptés avec les espèces
@@ -332,8 +370,32 @@ export default function Dashboard() {
   };
 
   return (
-    <IonPage>
-      <AppHeader large title={t("Tableau de bord")} actions={<AccountButton />}>
+    <IonPage className={web ? "rc-page--large rc-dash-page" : undefined}>
+      <AppHeader
+        large
+        eyebrow={web ? formatLongDate(new Date()) : undefined}
+        title={web && user ? t("Bonjour, {nom}", { nom: user.nom }) : t("Tableau de bord")}
+        actions={<AccountButton />}
+      >
+        {web ? (
+          <div className="rc-dash-periode">
+            <Field label={t("Du")} hideLabel prefix={<span className="rc-bl__prefixe">{t("Du")}</span>} type="date" value={plage.du} max={plage.au} onChange={(v) => v && setPlage((p) => ({ ...p, du: v }))} />
+            <Field label={t("Au")} hideLabel prefix={<span className="rc-bl__prefixe">{t("Au")}</span>} type="date" value={plage.au} min={plage.du} max={aujourdhuiTexte} onChange={(v) => v && setPlage((p) => ({ ...p, au: v }))} />
+            {(
+              [
+                ["jour", t("Aujourd'hui")],
+                ["mois", t("Ce mois")],
+                ["moisDernier", t("Mois dernier")],
+                ["annee", t("Cette année")],
+              ] as const
+            ).map(([cle, label]) => (
+              <Button key={cle} variant="ghost" onClick={() => setPlage(plageRaccourci(cle))}>
+                {label}
+              </Button>
+            ))}
+          </div>
+        ) : (
+        <>
         <Segmented
           label={t("Période")}
           value={periode}
@@ -365,6 +427,8 @@ export default function Dashboard() {
               onClick={() => setDecalageMois((m) => Math.min(0, m + 1))}
             />
           </div>
+        )}
+        </>
         )}
       </AppHeader>
 

@@ -46,7 +46,7 @@ describe("vendeur hors ligne", () => {
       typeVente: "CREDIT",
       lignes: [{ articleId: "a1", quantite: 2, prixUnitaire: 10, tauxTva: 19 }],
     });
-    expect(facture.numero).toMatch(/^V001-\d{2}-0001$/);
+    expect(facture.numero).toMatch(/^\d{2}\/0001$/);
     expect(facture.montantTTC).toBe(23.8);
     expect(facture.lignes[0].article.designation).toBe("CIRE");
 
@@ -74,7 +74,7 @@ describe("vendeur hors ligne", () => {
     globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
       const methode = init?.method ?? "GET";
       appels.push({ methode, url, corps: init?.body ? JSON.parse(String(init.body)) : null });
-      const json = url.endsWith("/numero-suivant") ? { numero: "V001-26-0001" } : methode === "GET" ? [] : {};
+      const json = url.endsWith("/numero-suivant") ? { numero: "26/0001" } : methode === "GET" ? [] : {};
       return new Response(JSON.stringify(json), { status: 200, headers: { "Content-Type": "application/json" } });
     }) as unknown as typeof fetch;
 

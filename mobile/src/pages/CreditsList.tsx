@@ -62,7 +62,8 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
       {groupes.length === 0 ? (
         <EmptyState icon={walletOutline} title={t("Aucun résultat.")} message={t("Cherchez par nom de client, code, ville ou N° de bon.")} />
       ) : (
-        groupes.map((g) => {
+        <div className="rc-credits-grille">
+        {groupes.map((g) => {
           return (
             <Section key={g.client.id}>
               <div className="rc-group rc-credit">
@@ -104,7 +105,8 @@ export default function CreditsList({ credits, loading, query, onPayer, onAvance
               </div>
             </Section>
           );
-        })
+        })}
+        </div>
       )}
     </>
   );

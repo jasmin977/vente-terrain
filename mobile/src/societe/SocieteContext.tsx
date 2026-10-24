@@ -28,6 +28,12 @@ interface SocieteContextValue {
 const SocieteContext = createContext<SocieteContextValue | null>(null);
 const cle = (userId: string) => `societe-admin:${userId}`;
 
+// Page rechargée (F5) sur un écran de l'app : la société de la session est remise en place sans écran d'accueil
+// ni retour au tableau de bord, on reste sur l'écran affiché. Ouvrir une société (connexion, changement) garde
+// l'accueil habituel.
+const CHEMIN_AU_CHARGEMENT = window.location.pathname.replace(/\/+$/, "");
+let rechargementAttendu = CHEMIN_AU_CHARGEMENT !== "" && CHEMIN_AU_CHARGEMENT !== "/login";
+
 export function SocieteProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [societe, setSociete] = useState<Societe | null>(null);
@@ -38,6 +44,10 @@ export function SocieteProvider({ children }: { children: ReactNode }) {
   const ouverteId = useRef<string | null>(null);
 
   const appliquer = useCallback((s: Societe | null, avecAccueil: boolean) => {
+    if (s && rechargementAttendu) {
+      rechargementAttendu = false;
+      avecAccueil = false;
+    }
     setSociete(s);
     definirSocieteImprimee(s);
     // La même société réappliquée (session rafraîchie) : rien à réinitialiser.

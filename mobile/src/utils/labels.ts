@@ -27,6 +27,7 @@ export const modePaiementLabel: Record<ModePaiement, string> = traduits({
   CHEQUE: "Chèque",
   VIREMENT: "Virement",
   TPE: "TPE",
+  TRAITE: "Traite",
 });
 
 export const statutLabel: Record<StatutFacture, string> = traduits({
@@ -59,7 +60,7 @@ export const motifEcartLabel: Record<MotifEcart, string> = traduits({
 
 export const statutInventaireLabel: Record<StatutInventaire, string> = traduits({
   EN_COURS: "En cours",
-  VALIDE: "Validé",
+  VALIDE: "Terminé",
 });
 
 export function initials(name: string): string {

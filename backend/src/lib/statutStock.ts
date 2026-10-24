@@ -7,8 +7,9 @@
 
 export type StatutStock = "RUPTURE" | "BAS" | "NOUVEAU" | "OK";
 
-/** Seuil d'alerte par défaut quand l'article n'a pas de stock minimum : un colis (3 pièces pour un article à la pièce). */
-export const seuilParDefaut = (colisage: number) => (colisage > 1 ? colisage : 3);
+/** Seuil d'alerte par défaut quand l'article n'a pas de stock minimum : 5 colis (5 pièces pour un article à la pièce). */
+export const STOCK_MINI_COLIS = 5;
+export const seuilParDefaut = (colisage: number) => STOCK_MINI_COLIS * Math.max(1, colisage);
 
 export interface EntreeStatut {
   stock: number;
@@ -33,5 +34,7 @@ export function etiquetteActive(a: Pick<EntreeStatut, "etiquette" | "etiquetteJu
 export function statutStock(a: EntreeStatut, maintenant = new Date()): StatutStock {
   if (a.stock <= 1e-9) return "RUPTURE";
   if (a.stock <= seuilAlerte(a) + 1e-9) return "BAS";
-  return etiquetteActive(a, maintenant) ? "NOUVEAU" : "OK";
+  // Mise en avant (nouveauté / promotion) retirée pour l'instant : plus de bleu sur le plan.
+  void maintenant;
+  return "OK";
 }

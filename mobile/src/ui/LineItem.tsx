@@ -13,13 +13,15 @@ interface LineItemProps {
   removeLabel: string;
   onRemove: () => void;
   error?: ReactNode;
+  /** Non-blocking notice (e.g. depot stock will go negative). */
+  warning?: ReactNode;
 }
 
 /**
  * An editable document line (invoice, truck loading). Two tiers so the
  * 44px controls never compete with the product name for width.
  */
-export default function LineItem({ leading, title, meta, control, amount, removeLabel, onRemove, error }: LineItemProps) {
+export default function LineItem({ leading, title, meta, control, amount, removeLabel, onRemove, error, warning }: LineItemProps) {
   return (
     <div className={`rc-line${error ? " rc-line--error" : ""}`}>
       <div className="rc-line__top">
@@ -34,10 +36,12 @@ export default function LineItem({ leading, title, meta, control, amount, remove
         {control}
         {amount && <span className="rc-line__amount">{amount}</span>}
       </div>
-      {error && (
+      {error ? (
         <p className="rc-line__error" role="alert">
           {error}
         </p>
+      ) : (
+        warning && <p className="rc-line__error rc-line__error--warning">{warning}</p>
       )}
     </div>
   );

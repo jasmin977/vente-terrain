@@ -228,7 +228,7 @@ const articleSchema = z.object({
   categorieId: z.string().uuid().nullable().optional(),
   // Exclu du suivi des dates d'expiration.
   sansPeremption: z.boolean().optional(),
-  // Stock minimum en pièces (null : un colis) et mise en avant, jusqu'à une date (AAAA-MM-JJ, null : sans fin).
+  // Stock minimum en pièces, saisi en colis dans l'app (null : 5 colis) et mise en avant, jusqu'à une date (AAAA-MM-JJ, null : sans fin).
   stockMini: z.number().positive().nullable().optional(),
   etiquette: z.enum(["NOUVEAU", "PROMOTION"]).nullable().optional(),
   etiquetteJusqua: dateExpirationSchema.nullable().optional(),

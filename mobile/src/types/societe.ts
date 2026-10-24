@@ -9,9 +9,13 @@ export interface Societe {
   adresse?: string | null;
   telephone?: string | null;
   logo?: string | null;
+  /** Dépôt (distribution) ou supermarché (avec ses caisses). */
+  type?: TypeSociete;
   /** Liste des sociétés (admin) : de quoi savoir si la société est encore vide. */
   _count?: { articles: number; users: number; clients: number };
 }
+
+export type TypeSociete = "DEPOT" | "SUPERMARCHE";
 
 export interface SocieteInput {
   nom: string;
@@ -21,6 +25,7 @@ export interface SocieteInput {
   adresse?: string;
   telephone?: string;
   logo?: string;
+  type?: TypeSociete;
 }
 
 export interface ResultatImport {

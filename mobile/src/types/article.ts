@@ -72,7 +72,7 @@ export interface ArticleInput {
   fodec: number;
   prixGros: number | null;
   categorieId?: string | null;
-  /** Stock minimum en pièces (null : un colis) : en dessous, « stock bas » sur le plan 3D. */
+  /** Stock minimum en pièces, saisi en colis (null : 5 colis) : en dessous, « stock bas » sur le plan 3D. */
   stockMini?: number | null;
   /** Mise en avant (bleu sur le plan 3D), jusqu'à une date AAAA-MM-JJ (null : sans fin). */
   etiquette?: "NOUVEAU" | "PROMOTION" | null;

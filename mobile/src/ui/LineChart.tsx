@@ -14,6 +14,8 @@ interface LineChartProps {
   label: string;
   nomAchat: string;
   nomVente: string;
+  /** Courbes tracées (les deux par défaut) : un graphique par prix quand on n'en veut qu'une. */
+  series?: ("achat" | "vente")[];
 }
 
 const L = 320;
@@ -27,12 +29,14 @@ const dateCourte = (ms: number) =>
  * Évolution de deux prix dans le temps : un prix reste le même jusqu'au changement suivant, d'où des
  * paliers (courbe en escalier) prolongés jusqu'à aujourd'hui, et un point à chaque changement.
  */
-export default function LineChart({ points, label, nomAchat, nomVente }: LineChartProps) {
+export default function LineChart({ points, label, nomAchat, nomVente, series = ["achat", "vente"] }: LineChartProps) {
   if (points.length === 0) return null;
+  const avecAchat = series.includes("achat");
+  const avecVente = series.includes("vente");
   const debut = points[0].date;
   const fin = Math.max(Date.now(), points[points.length - 1].date);
   const duree = Math.max(1, fin - debut);
-  const valeurs = points.flatMap((p) => [p.achat, p.vente]);
+  const valeurs = points.flatMap((p) => [...(avecAchat ? [p.achat] : []), ...(avecVente ? [p.vente] : [])]);
   const min = Math.min(...valeurs);
   const max = Math.max(...valeurs);
   // Marge de lecture : une courbe plate ne colle pas aux bords.
@@ -69,18 +73,18 @@ export default function LineChart({ points, label, nomAchat, nomVente }: LineCha
         <text x={L - MG.droite} y={H - 5} textAnchor="end" className="rc-lines__axe">
           {dateCourte(fin)}
         </text>
-        <path d={escalier("achat")} className="rc-lines__trait rc-lines__trait--achat" fill="none" />
-        <path d={escalier("vente")} className="rc-lines__trait rc-lines__trait--vente" fill="none" />
-        {points.map((p) => (
-          <g key={p.date}>
-            <circle cx={x(p.date)} cy={y(p.achat)} r={3.5} className="rc-lines__point rc-lines__point--achat" />
-            <circle cx={x(p.date)} cy={y(p.vente)} r={3.5} className="rc-lines__point rc-lines__point--vente" />
+        {avecAchat && <path d={escalier("achat")} className="rc-lines__trait rc-lines__trait--achat" fill="none" />}
+        {avecVente && <path d={escalier("vente")} className="rc-lines__trait rc-lines__trait--vente" fill="none" />}
+        {points.map((p, i) => (
+          <g key={`${p.date}-${i}`}>
+            {avecAchat && <circle cx={x(p.date)} cy={y(p.achat)} r={3.5} className="rc-lines__point rc-lines__point--achat" />}
+            {avecVente && <circle cx={x(p.date)} cy={y(p.vente)} r={3.5} className="rc-lines__point rc-lines__point--vente" />}
           </g>
         ))}
       </svg>
       <figcaption className="rc-lines__legende">
-        <span className="rc-lines__cle rc-lines__cle--achat">{nomAchat}</span>
-        <span className="rc-lines__cle rc-lines__cle--vente">{nomVente}</span>
+        {avecAchat && <span className="rc-lines__cle rc-lines__cle--achat">{nomAchat}</span>}
+        {avecVente && <span className="rc-lines__cle rc-lines__cle--vente">{nomVente}</span>}
       </figcaption>
     </figure>
   );

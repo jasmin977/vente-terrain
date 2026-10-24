@@ -1,7 +1,7 @@
 import EscPosPrinter from "../plugins/escPosPrinter";
 import { getPrinterIp } from "../lib/printerSettings";
 import type { Facture } from "../types/facture";
-import { formatMoney } from "./format";
+import { formatDateTime, formatMoney } from "./format";
 import { societeImprimee } from "./societe";
 
 const ESC = 0x1b;
@@ -34,7 +34,7 @@ function buildReceiptBytes(facture: Facture): Uint8Array {
   if (SOCIETE.telephone) text(`Tel : ${SOCIETE.telephone}\n`);
   text("\n");
   text(`Bon de livraison N° ${facture.numero}\n`);
-  text(`${new Date(facture.date).toLocaleString()}\n`);
+  text(`${formatDateTime(facture.date)}\n`);
   raw([ESC, 0x61, 0x00]); // aligner à gauche
   text("-".repeat(LINE_WIDTH) + "\n");
   text(`Client: ${facture.client?.nomCommerce ?? facture.clientId}\n`);
@@ -44,6 +44,9 @@ function buildReceiptBytes(facture: Facture): Uint8Array {
   for (const l of facture.lignes) {
     text(`${l.article.designation}\n`);
     line(`  ${Number(l.quantite)} x ${formatMoney(l.prixUnitaire)}`, formatMoney(l.montantTTC));
+    // Promotion : pièces offertes et remise sous la ligne.
+    if (Number(l.quantiteOfferte ?? 0) > 0) text(`  + ${Number(l.quantiteOfferte)} offert(s)${l.promotion ? ` (${l.promotion.numero})` : ""}\n`);
+    if (Number(l.remise ?? 0) > 0) line(`  Remise promo`, `-${formatMoney(Number(l.remise))}`);
   }
 
   text("-".repeat(LINE_WIDTH) + "\n");

@@ -30,14 +30,58 @@ function serverError(res: Response, err: unknown) {
   return res.status(500).json({ error: "Erreur serveur" });
 }
 
+// ---------------------------------------------------------------- Périmètre (inventaire par catégorie)
+
+type CategorieArbre = { id: string; nom: string; parentId: string | null };
+
+async function categoriesDe(societeId: string): Promise<CategorieArbre[]> {
+  return prisma.categorie.findMany({ where: { societeId }, select: { id: true, nom: true, parentId: true } });
+}
+
+/** Les catégories choisies et toutes leurs sous-catégories ; null : pas de restriction (tout le lieu). */
+function perimetre(categorieIds: string[], arbre: CategorieArbre[]): Set<string> | null {
+  if (categorieIds.length === 0) return null;
+  const res = new Set<string>(categorieIds);
+  let ajoute = true;
+  while (ajoute) {
+    ajoute = false;
+    for (const c of arbre) {
+      if (c.parentId && res.has(c.parentId) && !res.has(c.id)) {
+        res.add(c.id);
+        ajoute = true;
+      }
+    }
+  }
+  return res;
+}
+
+/** « Boissons › Eaux » : chemin d'une catégorie dans l'arbre. */
+function chemin(id: string, arbre: CategorieArbre[]): string {
+  const parId = new Map(arbre.map((c) => [c.id, c]));
+  const noms: string[] = [];
+  let c = parId.get(id);
+  while (c) {
+    noms.unshift(c.nom);
+    c = c.parentId ? parId.get(c.parentId) : undefined;
+  }
+  return noms.join(" › ");
+}
+
+const dansPerimetre = (p: Set<string> | null, categorieId: string | null) => p === null || (categorieId !== null && p.has(categorieId));
+
 // Lieu inventorié : un camion (vendeurId) ou le dépôt (null).
 type Lieu = { vendeurId: string | null; societeId: string };
 
 async function stockMap(lieu: Lieu) {
-  const stock = lieu.vendeurId
-    ? await prisma.stockCamion.findMany({ where: { vendeurId: lieu.vendeurId }, include: { article: true } })
-    : await prisma.stockDepot.findMany({ where: { article: { societeId: lieu.societeId } }, include: { article: true } });
-  return new Map(stock.map((s) => [s.articleId, s]));
+  if (lieu.vendeurId) {
+    const stock = await prisma.stockCamion.findMany({ where: { vendeurId: lieu.vendeurId }, include: { article: true } });
+    return new Map(stock.map((s) => [s.articleId, { articleId: s.articleId, quantite: Number(s.quantite), article: s.article }]));
+  }
+  // Dépôt : tout le catalogue, même à 0 ou sans ligne de stock (le stock de l'app peut être faux).
+  const articles = await prisma.article.findMany({ where: { societeId: lieu.societeId, deletedAt: null }, include: { stockDepot: true } });
+  return new Map(
+    articles.map(({ stockDepot, ...article }) => [article.id, { articleId: article.id, quantite: Number(stockDepot?.quantite ?? 0), article }])
+  );
 }
 
 type StockMap = Awaited<ReturnType<typeof stockMap>>;
@@ -53,7 +97,7 @@ async function quantiteActuelle(tx: Prisma.TransactionClient, lieu: Lieu, articl
 // Construit les lignes affichées : pour un inventaire en cours, la quantité
 // théorique suit le stock camion en temps réel et la liste inclut aussi les
 // articles du camion pas encore comptés.
-function construireLignes(inv: InventaireComplet, stock: StockMap) {
+function construireLignes(inv: InventaireComplet, stock: StockMap, p: Set<string> | null = null) {
   const enCours = inv.statut === "EN_COURS";
   const comptees = new Map(inv.lignes.map((l) => [l.articleId, l]));
   const lignes = inv.lignes.map((l) => {
@@ -71,7 +115,10 @@ function construireLignes(inv: InventaireComplet, stock: StockMap) {
   });
   if (enCours) {
     for (const s of stock.values()) {
-      if (comptees.has(s.articleId) || Number(s.quantite) === 0 || s.article.deletedAt) continue;
+      // Les articles à 0 ou en négatif restent à compter : c'est là que le stock de l'app est le plus souvent faux.
+      if (comptees.has(s.articleId) || s.article.deletedAt) continue;
+      // Inventaire d'une catégorie : seulement ses articles.
+      if (!dansPerimetre(p, s.article.categorieId)) continue;
       lignes.push({
         articleId: s.articleId,
         article: s.article,
@@ -126,6 +173,7 @@ inventairesRouter.get("/", async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+    const arbre = await categoriesDe(req.societeId!);
     const stocks = new Map<string, StockMap>();
     for (const inv of inventaires) {
       const cle = inv.vendeurId ?? "depot";
@@ -135,11 +183,49 @@ inventairesRouter.get("/", async (req, res) => {
     }
     res.json(
       inventaires.map((inv) => {
-        const lignes = construireLignes(inv, stocks.get(inv.vendeurId ?? "depot") ?? new Map());
+        const lignes = construireLignes(inv, stocks.get(inv.vendeurId ?? "depot") ?? new Map(), perimetre(inv.categorieIds, arbre));
         const { lignes: _l, ...entete } = inv;
         return { ...entete, lieu: lieuDe(inv), resume: resumer(lignes) };
       })
     );
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+inventairesRouter.get("/suivi-categories", async (req, res) => {
+  try {
+    const arbre = await categoriesDe(req.societeId!);
+    const [inventaires, comptes] = await Promise.all([
+      prisma.inventaire.findMany({
+        where: { societeId: req.societeId, vendeurId: null },
+        select: { id: true, statut: true, categorieIds: true, libelle: true, dateValidation: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.article.groupBy({ by: ["categorieId"], where: { societeId: req.societeId, deletedAt: null }, _count: true }),
+    ]);
+    const nbDirect = new Map(comptes.map((c) => [c.categorieId, c._count]));
+    const perimetres = inventaires.map((i) => ({ ...i, p: perimetre(i.categorieIds, arbre) }));
+    const lignes = arbre.map((c) => {
+      const sousArbre = perimetre([c.id], arbre)!;
+      const nbArticles = [...sousArbre].reduce((s, id) => s + (nbDirect.get(id) ?? 0), 0);
+      const couvre = perimetres.filter((i) => i.p === null || i.p.has(c.id));
+      const dernier = couvre.find((i) => i.statut === "VALIDE" && i.dateValidation);
+      const enCours = couvre.find((i) => i.statut === "EN_COURS");
+      return {
+        id: c.id,
+        nom: c.nom,
+        chemin: chemin(c.id, arbre),
+        parentId: c.parentId,
+        nbArticles,
+        dernierInventaire: dernier ? { id: dernier.id, date: dernier.dateValidation, libelle: dernier.libelle } : null,
+        joursDepuis: dernier?.dateValidation ? Math.floor((Date.now() - dernier.dateValidation.getTime()) / 86_400_000) : null,
+        // principal : l'inventaire a été lancé sur cette catégorie (ses sous-catégories y sont seulement incluses).
+        enCours: enCours ? { id: enCours.id, libelle: enCours.libelle, principal: enCours.categorieIds.includes(c.id) } : null,
+      };
+    });
+    lignes.sort((a, b) => a.chemin.localeCompare(b.chemin, "fr"));
+    res.json(lignes);
   } catch (err) {
     serverError(res, err);
   }
@@ -153,7 +239,7 @@ inventairesRouter.get("/:id", async (req, res) => {
     });
     if (!inv) return res.status(404).json({ error: "Inventaire introuvable" });
     const stock = inv.statut === "EN_COURS" ? await stockMap({ vendeurId: inv.vendeurId, societeId: inv.societeId }) : new Map();
-    res.json(serialiser(inv, construireLignes(inv, stock)));
+    res.json(serialiser(inv, construireLignes(inv, stock, perimetre(inv.categorieIds, await categoriesDe(inv.societeId)))));
   } catch (err) {
     serverError(res, err);
   }
@@ -163,6 +249,8 @@ inventairesRouter.get("/:id", async (req, res) => {
 const creerSchema = z.object({
   vendeurId: z.string().uuid().optional(),
   lieu: z.enum(["DEPOT", "CAMION"]).optional(),
+  // Dépôt : catégories à inventorier (avec leurs sous-catégories) ; absent ou vide = tout le dépôt.
+  categorieIds: z.array(z.string().uuid()).max(100).optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -173,12 +261,33 @@ inventairesRouter.post("/", async (req, res) => {
   const vendeurId = parsed.data.lieu === "DEPOT" ? null : parsed.data.vendeurId ?? null;
   if (parsed.data.lieu !== "DEPOT" && !vendeurId) return res.status(400).json({ error: "Camion à inventorier requis" });
   try {
-    const existant = await prisma.inventaire.findFirst({
-      where: { societeId: req.societeId!, vendeurId, statut: "EN_COURS" },
-    });
-    if (existant) return res.status(200).json(existant);
+    // Camion : un seul inventaire en cours, on reprend celui qui existe.
+    if (vendeurId) {
+      const existant = await prisma.inventaire.findFirst({ where: { societeId: req.societeId!, vendeurId, statut: "EN_COURS" } });
+      if (existant) return res.status(200).json(existant);
+      const inv = await prisma.inventaire.create({ data: { societeId: req.societeId!, vendeurId, adminId: req.user!.id, note: parsed.data.note } });
+      return res.status(201).json(inv);
+    }
+
+    // Dépôt : par catégorie (inventaire tournant) ou tout le dépôt. Plusieurs peuvent être en cours en même temps,
+    // à condition de ne pas porter sur les mêmes articles.
+    const arbre = await categoriesDe(req.societeId!);
+    const connues = new Set(arbre.map((c) => c.id));
+    const ids = [...new Set(parsed.data.categorieIds ?? [])].filter((id) => connues.has(id));
+    const nouveau = perimetre(ids, arbre);
+    const ouverts = await prisma.inventaire.findMany({ where: { societeId: req.societeId!, vendeurId: null, statut: "EN_COURS" } });
+    for (const o of ouverts) {
+      const memes = o.categorieIds.length === ids.length && o.categorieIds.every((x) => ids.includes(x));
+      if (memes) return res.status(200).json(o);
+      const autre = perimetre(o.categorieIds, arbre);
+      const chevauche = autre === null || nouveau === null || [...nouveau].some((x) => autre.has(x));
+      if (chevauche) {
+        return res.status(409).json({ error: `Un inventaire en cours porte déjà sur ces articles : « ${o.libelle ?? "Tout le dépôt"} ». Terminez-le d'abord.` });
+      }
+    }
+    const libelle = ids.length === 0 ? "Tout le dépôt" : ids.map((id) => chemin(id, arbre)).join(", ");
     const inv = await prisma.inventaire.create({
-      data: { societeId: req.societeId!, vendeurId, adminId: req.user!.id, note: parsed.data.note },
+      data: { societeId: req.societeId!, vendeurId: null, adminId: req.user!.id, note: parsed.data.note, categorieIds: ids, libelle },
     });
     res.status(201).json(inv);
   } catch (err) {

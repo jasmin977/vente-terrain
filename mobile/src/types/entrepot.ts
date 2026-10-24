@@ -9,7 +9,7 @@ export interface ArticleRange {
   colisage: number;
   /** Stock réel de l'article au dépôt (pas seulement ce qui est dans la case). */
   stock: number;
-  /** Seuil du stock bas (stock minimum de l'article, sinon un colis). */
+  /** Seuil du stock bas (stock minimum de l'article, sinon 5 colis). */
   seuil: number;
   statut: "RUPTURE" | "BAS" | "NOUVEAU" | "OK";
   /** Mise en avant en cours (bleu). */

@@ -1,0 +1,9 @@
+{
+  "appId": "com.bonneaffaire.collecte",
+  "appName": "Scan Stock",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

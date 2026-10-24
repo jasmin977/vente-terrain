@@ -34,7 +34,11 @@ export default function AppHeader({ title, eyebrow, large, backHref, actions, ch
             {eyebrow && <p className="rc-appbar__eyebrow">{eyebrow}</p>}
             <h1 className="rc-appbar__title">{title}</h1>
           </div>
-          {actions && <div className="rc-appbar__actions">{actions}</div>}
+          <div className="rc-appbar__actions">
+            {/* Web : les boutons d'action de la page (création, enregistrer, valider…) viennent se poser ici. */}
+            <span className="rc-appbar__emplacement" data-rc-entete-actions="" />
+            {actions}
+          </div>
         </div>
         {children && <div className="rc-appbar__below">{children}</div>}
       </div>

@@ -1,4 +1,5 @@
-export type PeriodeTableauDeBord = "jour" | "semaine" | "mois";
+/** « plage » : période libre (Du / Au) choisie au PC. */
+export type PeriodeTableauDeBord = "jour" | "semaine" | "mois" | "plage";
 
 export interface PointSerie {
   /** Heure (« 14h ») ou jour du mois (« 6 »). */
@@ -9,6 +10,8 @@ export interface PointSerie {
 
 export interface TableauDeBord {
   periode: PeriodeTableauDeBord;
+  /** Graduation du graphique des ventes. */
+  pas?: "heure" | "jour" | "mois";
   debut: string;
   fin: string;
   precedent: { debut: string; fin: string };
@@ -49,4 +52,25 @@ export interface TableauDeBord {
     lignesSansPrixAchat: number;
   };
   stock: { depot: number; camions: number };
+  facturesVente: { nb: number; total: number; blAFacturer: { nb: number; total: number } };
+  achats: { total: number; precedent: number; evolution: number | null; nbBL: number; totalBL: number; nbFactures: number; totalFactures: number; nbEntrees: number; totalEntrees: number };
+  fournisseurs: {
+    du: number;
+    nbAPayer: number;
+    regle: number;
+    regleParMode: Partial<Record<"ESPECES" | "CHEQUE" | "VIREMENT" | "TRAITE" | "TPE", number>>;
+    topAPayer: { id: string; nom: string; ref: number; divers: boolean; solde: number; nbImpayes: number }[];
+  };
+  depenses: { total: number; nb: number; precedent: number; evolution: number | null; parCategorie: { id: string; nom: string; montant: number; nb: number }[] };
+  /** Encaissements clients − (fournisseurs payés + dépenses) sur la période. */
+  tresorerie: {
+    entrees: number;
+    /** Fournisseurs payés (traites à leur échéance) + dépenses. */
+    sorties: number;
+    solde: number;
+    /** Traites arrivées à échéance dans la période (comprises dans les sorties). */
+    traitesEchues?: number;
+    /** Traites remises, pas encore échues : l'argent sortira plus tard. */
+    traitesAVenir?: { nb: number; total: number };
+  };
 }

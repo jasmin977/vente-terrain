@@ -151,7 +151,7 @@ function VueResume({ data, filtre, onFiltre, onGenerer, onBatiment, onRangerAuto
       {!analyse && !peremption && <h3 className="rc-entrepot__sous-titre">{t("Stock en direct")}</h3>}
       {!analyse && !peremption && (
       <Group>
-        {ORDRE_STATUTS.map((s) => (
+        {ORDRE_STATUTS.filter((s) => s !== "NOUVEAU").map((s) => (
           <Row
             key={s}
             compact
